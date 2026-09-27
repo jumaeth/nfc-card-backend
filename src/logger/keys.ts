@@ -20,6 +20,22 @@ export const LogKey = {
   INVITATION_SENT: 'invitation.sent',
   INVITATION_ACCEPTED: 'invitation.accepted',
 
+  // Admin console (staff actions; `action` field says what changed)
+  ADMIN_ACTION: 'admin.action',
+
+  // Product stock (website orders)
+  PRODUCT_STOCK_RESERVED: 'product.stock.reserved',
+  PRODUCT_STOCK_RELEASED: 'product.stock.released',
+
+  // Shop orders
+  ORDER_CREATED: 'order.created',
+  ORDER_PAID: 'order.paid',
+  ORDER_EXPIRED: 'order.expired',
+  ORDER_CLAIMED: 'order.claimed',
+  ORDER_CARDS_CREATED: 'order.cards.created',
+  ORDER_STATUS_CHANGED: 'order.status.changed',
+  ORDER_WEBHOOK_ERROR: 'order.webhook.error',
+
   // Cards / pages
   CARD_CREATED: 'card.created',
   CARD_LINKED: 'card.linked',

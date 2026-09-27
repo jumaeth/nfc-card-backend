@@ -18,7 +18,7 @@ export class CompanyAccessService {
     const member = await this.prisma.companyMember.findUnique({
       where: { userId_companyId: { userId, companyId } },
     });
-    if (!member || member.deactivatedAt) {
+    if (!member || member.deactivatedAt || member.removedAt) {
       throw new ForbiddenException('You are not a member of this company');
     }
     return member;

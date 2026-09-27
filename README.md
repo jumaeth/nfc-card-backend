@@ -32,6 +32,7 @@ tap destinations built in the app: review, menu, link hub, vCard, wifi).
 | `analytics` | tap summary, series, top cards |
 | `public`    | unauthenticated tap resolution + analytics recording |
 | `billing`   | plan catalogue + resolved feature gating |
+| `admin`     | staff console API (`/admin/*`): customers, cards, plans, users, roles |
 
 ## Local setup
 
@@ -41,11 +42,30 @@ pnpm install
 pnpm local:up                   # Postgres + Mailpit via docker compose
 pnpm db:migrate                 # applies init + RLS migrations
 pnpm db:seed                    # seeds the Starter/Pro/Managed plans
+pnpm db:seed:dev                # local only: dev logins per plan (app) and per staff role (admin)
 pnpm start:dev                  # http://localhost:3311, docs at /docs
+pnpm staff:grant you@taplino.ch SUPER_ADMIN   # optional: admin console access
 ```
+
+> `db:seed:dev` is idempotent and resets the dev accounts' roles and plans on every
+> run. All use the password `taplino-dev`: `dev@`, `starter@`, `pro@`, `managed@`
+> (app, one per plan) and `superadmin@`, `admin@`, `support@`, `sales@` (admin
+> console, one per role), all `@taplino.ch`. See the app and admin READMEs.
 
 > The plan seed is required: company creation assigns the Starter plan as the
 > SYSTEM baseline. Run `pnpm db:seed` before signing up.
+
+## Staff roles (admin console)
+
+`User.platformRole` gates `/admin/*` via `@PlatformRoles(minimum)` + `PlatformRoleGuard`
+on the ladder `USER < SALES < SUPPORT < ADMIN < SUPER_ADMIN`. SALES only sees companies
+where `Company.salesRepId` is them; SUPPORT sees all read-only; ADMIN+ manages all.
+Staff are not tenant members, so the admin services read and write under `$asAdmin`
+and scope explicitly (`AdminCustomersService.scopeWhere` / `requireManageable`).
+Every staff write is logged under `admin.action`.
+
+The console runs as its own origin: list it in `FRONTEND_URL` after the app origin
+(the first entry is used for email links).
 
 ## Notes
 

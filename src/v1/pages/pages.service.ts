@@ -2,6 +2,8 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { customAlphabet } from 'nanoid';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { CompanyAccessService } from '../companies/company-access.service.js';
+import { BillingService } from '../billing/billing.service.js';
+import { softDeletePage } from '../../common/soft-delete.js';
 import { log, LogKey } from '../../logger/index.js';
 import { Prisma } from '../../../generated/prisma/client.js';
 import type { PageKind } from '../../../generated/prisma/client.js';
@@ -27,6 +29,7 @@ export class PagesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: CompanyAccessService,
+    private readonly billing: BillingService,
   ) {}
 
   /** List a company's pages, optionally filtered by kind and/or location. */
@@ -39,6 +42,7 @@ export class PagesService {
     return this.prisma.page.findMany({
       where: {
         companyId,
+        deletedAt: null,
         ...(filters.kind && { kind: filters.kind }),
         ...(filters.locationId && { locationId: filters.locationId }),
       },
@@ -49,6 +53,16 @@ export class PagesService {
 
   async create(companyId: string, userId: string, dto: CreatePageDto) {
     await this.access.requireManager(userId, companyId);
+
+    const features = await this.billing.getCompanyFeatures(companyId);
+    if (!features.createPages) {
+      const hint = await this.billing.upgradeHint(
+        features,
+        (f) => f.createPages,
+        'to build your own',
+      );
+      throw new ForbiddenException(`Your plan does not include creating pages. ${hint}`);
+    }
 
     if (dto.locationId) {
       await this.requireLocationInCompany(dto.locationId, companyId);
@@ -114,8 +128,7 @@ export class PagesService {
   async remove(id: string, companyId: string, userId: string) {
     await this.access.requireManager(userId, companyId);
     await this.requirePage(id, companyId);
-    // Cards referencing this page have activePageId nulled via DB onDelete: SetNull.
-    await this.prisma.page.delete({ where: { id } });
+    await this.prisma.$transaction((tx) => softDeletePage(tx, id));
     return { id };
   }
 
@@ -124,7 +137,7 @@ export class PagesService {
   /** Load a page and assert it belongs to the company. */
   private async requirePage(id: string, companyId: string) {
     const page = await this.prisma.page.findUnique({ where: { id } });
-    if (!page) throw new NotFoundException('Page not found');
+    if (!page || page.deletedAt) throw new NotFoundException('Page not found');
     if (page.companyId !== companyId) throw new ForbiddenException();
     return page;
   }
@@ -132,7 +145,7 @@ export class PagesService {
   /** Assert a location exists and belongs to the company. */
   private async requireLocationInCompany(locationId: string, companyId: string) {
     const location = await this.prisma.location.findUnique({ where: { id: locationId } });
-    if (!location || location.companyId !== companyId) {
+    if (!location || location.deletedAt || location.companyId !== companyId) {
       throw new NotFoundException('Location not found');
     }
     return location;

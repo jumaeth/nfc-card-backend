@@ -89,6 +89,17 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get subscriptionPlan() {
     return this.client.subscriptionPlan;
   }
+  get product() {
+    return this.client.product;
+  }
+
+  // ─── Shop orders (not RLS-secured; OrdersService scopes access) ─────────────
+  get order() {
+    return this.client.order;
+  }
+  get orderItem() {
+    return this.client.orderItem;
+  }
 
   /**
    * Interactive transaction carrying the current request's tenant context. Sets
@@ -167,7 +178,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
 }
 
 /** The client surface available inside an interactive transaction callback. */
-type TxClient = Omit<
+export type TxClient = Omit<
   Client,
   '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
 >;

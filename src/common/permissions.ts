@@ -42,17 +42,37 @@ export function canManageRole(
 
 // ─── Platform (staff) roles ──────────────────────────────────────────────────
 
+// Gating ladder for staff routes (`@PlatformRoles` is a minimum). SALES sits
+// lowest: it can reach the admin console but only ever sees its own customers.
 export const PLATFORM_ROLE_RANK: Record<PlatformRole, number> = {
   USER: 0,
-  SUPPORT: 1,
-  ADMIN: 2,
-  SUPER_ADMIN: 3,
+  SALES: 1,
+  SUPPORT: 2,
+  ADMIN: 3,
+  SUPER_ADMIN: 4,
 };
 
-export const STAFF_PLATFORM_ROLES: PlatformRole[] = ['SUPPORT', 'ADMIN', 'SUPER_ADMIN'];
+export const STAFF_PLATFORM_ROLES: PlatformRole[] = ['SALES', 'SUPPORT', 'ADMIN', 'SUPER_ADMIN'];
 
 export function platformRoleAtLeast(role: PlatformRole, minimum: PlatformRole): boolean {
   return PLATFORM_ROLE_RANK[role] >= PLATFORM_ROLE_RANK[minimum];
+}
+
+/** Staff who see every customer (SALES only sees the ones assigned to them). */
+export function seesAllCustomers(role: PlatformRole): boolean {
+  return platformRoleAtLeast(role, 'SUPPORT');
+}
+
+/**
+ * Whether a staff member may change a customer. ADMIN+ may change any customer,
+ * SALES only its own, SUPPORT is read-only.
+ */
+export function canManageCustomer(
+  staff: { id: string; platformRole: PlatformRole },
+  company: { salesRepId: string | null },
+): boolean {
+  if (platformRoleAtLeast(staff.platformRole, 'ADMIN')) return true;
+  return staff.platformRole === 'SALES' && company.salesRepId === staff.id;
 }
 
 // ─── Passkey enforcement ─────────────────────────────────────────────────────

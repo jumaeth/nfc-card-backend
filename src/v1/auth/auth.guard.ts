@@ -159,7 +159,7 @@ export class BetterAuthGuard implements CanActivate {
 
   private async isPrivilegedAnywhere(userId: string): Promise<boolean> {
     const member = await this.prisma.companyMember.findFirst({
-      where: { userId, role: { in: PRIVILEGED_ROLES } },
+      where: { userId, role: { in: PRIVILEGED_ROLES }, removedAt: null },
       select: { id: true },
     });
     return member !== null;

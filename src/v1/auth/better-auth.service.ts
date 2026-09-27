@@ -307,8 +307,9 @@ export class BetterAuthService implements OnModuleInit {
           data: { deactivatedAt: null },
         });
         const companyIds = (
+          // Companies they were removed from stay archived.
           await tx.companyMember.findMany({
-            where: { userId },
+            where: { userId, removedAt: null },
             select: { companyId: true },
           })
         ).map((m) => m.companyId);

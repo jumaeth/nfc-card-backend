@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { customAlphabet } from 'nanoid';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import { softDeleteCard } from '../../common/soft-delete.js';
 import { CompanyAccessService } from '../companies/company-access.service.js';
 import { log, LogKey } from '../../logger/index.js';
 import { Prisma } from '../../../generated/prisma/client.js';
@@ -32,7 +33,7 @@ export class CardsService {
   async findAll(companyId: string, userId: string, locationId?: string) {
     await this.access.requireMember(userId, companyId);
     return this.prisma.card.findMany({
-      where: { companyId, ...(locationId ? { locationId } : {}) },
+      where: { companyId, deletedAt: null, ...(locationId ? { locationId } : {}) },
       include: { activePage: ACTIVE_PAGE_SELECT, location: LOCATION_SELECT },
       orderBy: { createdAt: 'desc' },
     });
@@ -120,9 +121,9 @@ export class CardsService {
     if (pageId) {
       const page = await this.prisma.page.findUnique({
         where: { id: pageId },
-        select: { id: true, companyId: true },
+        select: { id: true, companyId: true, deletedAt: true },
       });
-      if (!page || page.companyId !== companyId) {
+      if (!page || page.deletedAt || page.companyId !== companyId) {
         throw new BadRequestException('Page does not belong to this company');
       }
     }
@@ -150,7 +151,7 @@ export class CardsService {
   async remove(id: string, companyId: string, userId: string) {
     await this.access.requireManager(userId, companyId);
     await this.requireCard(id, companyId);
-    await this.prisma.card.delete({ where: { id } });
+    await this.prisma.$transaction((tx) => softDeleteCard(tx, id));
     return { id, deleted: true };
   }
 
@@ -166,7 +167,7 @@ export class CardsService {
       where: { id },
       ...(args?.include ? { include: args.include } : {}),
     });
-    if (!card) throw new NotFoundException('Card not found');
+    if (!card || card.deletedAt) throw new NotFoundException('Card not found');
     if (card.companyId !== companyId) {
       throw new ForbiddenException('This card belongs to another company');
     }
@@ -177,9 +178,9 @@ export class CardsService {
   private async assertLocationInCompany(locationId: string, companyId: string) {
     const location = await this.prisma.location.findUnique({
       where: { id: locationId },
-      select: { id: true, companyId: true },
+      select: { id: true, companyId: true, deletedAt: true },
     });
-    if (!location || location.companyId !== companyId) {
+    if (!location || location.deletedAt || location.companyId !== companyId) {
       throw new BadRequestException('Location does not belong to this company');
     }
   }

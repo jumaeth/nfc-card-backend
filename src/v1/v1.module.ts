@@ -9,6 +9,9 @@ import { PagesModule } from './pages/pages.module.js';
 import { AnalyticsModule } from './analytics/analytics.module.js';
 import { PublicModule } from './public/public.module.js';
 import { BillingModule } from './billing/billing.module.js';
+import { AdminModule } from './admin/admin.module.js';
+import { ProductsModule } from './products/products.module.js';
+import { OrdersModule } from './orders/orders.module.js';
 import { HealthController } from './health/health.controller.js';
 
 @Module({
@@ -23,6 +26,9 @@ import { HealthController } from './health/health.controller.js';
     AnalyticsModule,
     PublicModule,
     BillingModule,
+    AdminModule,
+    ProductsModule,
+    OrdersModule,
   ],
   controllers: [HealthController],
 })

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { CompanyAccessService } from '../companies/company-access.service.js';
 import { BillingService } from '../billing/billing.service.js';
@@ -7,6 +7,7 @@ import type { Prisma } from '../../../generated/prisma/client.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_RANGE_DAYS = 30;
+
 
 /** A single day's tap count in the time series. */
 export interface SeriesPoint {
@@ -22,7 +23,10 @@ export interface AnalyticsSummary {
   };
   series: SeriesPoint[];
   topCards: { cardId: string; name: string; taps: number }[];
-  /** Whether the company's plan includes analytics. Frontend upsell hint. */
+  /**
+   * Whether the company's plan includes analytics. When false, every other field
+   * is empty: tap data is only served to plans that include analytics.
+   */
   analyticsEnabled: boolean;
 }
 
@@ -103,10 +107,23 @@ export class AnalyticsService {
     query: AnalyticsQueryDto,
   ): Promise<AnalyticsSummary> {
     await this.access.requireMember(userId, companyId);
+
+    // Check the plan before touching tap data. The summary still answers with a
+    // 200 so the dashboard can show its upgrade prompt from `analyticsEnabled`.
+    const features = await this.billing.getCompanyFeatures(companyId);
+    if (!features.analytics) {
+      return {
+        totals: { taps: 0, byKind: {} },
+        series: [],
+        topCards: [],
+        analyticsEnabled: false,
+      };
+    }
+
     const { from, to } = this.resolveRange(query);
     const where = this.buildWhere(companyId, from, to, query.locationId);
 
-    const [taps, byKindGroups, seriesRows, topCardGroups, features] = await Promise.all([
+    const [taps, byKindGroups, seriesRows, topCardGroups] = await Promise.all([
       this.prisma.tapEvent.count({ where }),
       this.prisma.tapEvent.groupBy({
         by: ['kind'],
@@ -124,7 +141,6 @@ export class AnalyticsService {
         orderBy: { _count: { cardId: 'desc' } },
         take: 5,
       }),
-      this.billing.getCompanyFeatures(companyId),
     ]);
 
     const byKind: Record<string, number> = {};
@@ -161,7 +177,7 @@ export class AnalyticsService {
       totals: { taps, byKind },
       series,
       topCards,
-      analyticsEnabled: features.analytics,
+      analyticsEnabled: true,
     };
   }
 
@@ -171,6 +187,15 @@ export class AnalyticsService {
     query: AnalyticsQueryDto,
   ): Promise<CardBreakdownRow[]> {
     await this.access.requireMember(userId, companyId);
+    const features = await this.billing.getCompanyFeatures(companyId);
+    if (!features.analytics) {
+      const hint = await this.billing.upgradeHint(
+        features,
+        (f) => f.analytics,
+        'to unlock it',
+      );
+      throw new ForbiddenException(`Analytics is not included in your plan. ${hint}`);
+    }
     const { from, to } = this.resolveRange(query);
     const where = this.buildWhere(companyId, from, to, query.locationId);
 

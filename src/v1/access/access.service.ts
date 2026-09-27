@@ -23,7 +23,7 @@ export class AccessService {
         select: { id: true, name: true, email: true, emailVerified: true, avatarUrl: true, platformRole: true },
       }),
       this.prisma.companyMember.findMany({
-        where: { userId, deactivatedAt: null, company: { deletedAt: null } },
+        where: { userId, deactivatedAt: null, removedAt: null, company: { deletedAt: null } },
         include: { company: { select: { id: true, name: true, slug: true, logo: true, brandColor: true } } },
         orderBy: { createdAt: 'asc' },
       }),

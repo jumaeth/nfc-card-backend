@@ -11,6 +11,23 @@ interface InvitationEmailData {
   acceptUrl: string;
 }
 
+interface OrderEmailData {
+  number: string;
+  customerName: string;
+  items: { productName: string; quantity: number; lineTotalCents: number }[];
+  totalCents: number;
+  currency: string;
+  /** Set when the order is already linked to a business in the app. */
+  linkedCompanyName: string | null;
+  /** Register link (guest) or the app's orders page (linked). */
+  appUrl: string;
+}
+
+interface OrderNotificationData extends OrderEmailData {
+  email: string;
+  adminPath: string;
+}
+
 @Injectable()
 export class EmailService {
   private readonly from: string;
@@ -25,24 +42,39 @@ export class EmailService {
 
     if (resendKey) {
       this.resend = new Resend(resendKey);
-      log(LogKey.EMAIL_RESEND_SEND, 'Resend transport initialised', { from: this.from });
+      log(LogKey.EMAIL_RESEND_SEND, 'Resend transport initialised', {
+        from: this.from,
+      });
     } else if (smtpHost) {
       this.smtp = nodemailer.createTransport({
         host: smtpHost,
         port: config.get<number>('SMTP_PORT', 1027),
         secure: false,
       });
-      log(LogKey.EMAIL_SMTP_SEND, 'SMTP transport initialised', { host: smtpHost, from: this.from });
+      log(LogKey.EMAIL_SMTP_SEND, 'SMTP transport initialised', {
+        host: smtpHost,
+        from: this.from,
+      });
     } else {
-      warn(LogKey.EMAIL_NO_TRANSPORT, 'No email transport configured — set RESEND_API_KEY or SMTP_HOST');
+      warn(
+        LogKey.EMAIL_NO_TRANSPORT,
+        'No email transport configured — set RESEND_API_KEY or SMTP_HOST',
+      );
     }
   }
 
   async sendVerificationEmail(to: string, url: string): Promise<void> {
-    await this.send(to, 'Verify your email · Taplino', verificationTemplate(url));
+    await this.send(
+      to,
+      'Verify your email · Taplino',
+      verificationTemplate(url),
+    );
   }
 
-  async sendInvitationEmail(to: string, data: InvitationEmailData): Promise<void> {
+  async sendInvitationEmail(
+    to: string,
+    data: InvitationEmailData,
+  ): Promise<void> {
     await this.send(
       to,
       `You've been invited to join ${data.companyName} on Taplino`,
@@ -55,14 +87,49 @@ export class EmailService {
   }
 
   async sendPasswordResetOtpEmail(to: string, code: string): Promise<void> {
-    await this.send(to, `Reset your Taplino password: ${code}`, passwordResetOtpTemplate(code));
+    await this.send(
+      to,
+      `Reset your Taplino password: ${code}`,
+      passwordResetOtpTemplate(code),
+    );
+  }
+
+  async sendOrderConfirmationEmail(
+    to: string,
+    data: OrderEmailData,
+  ): Promise<void> {
+    await this.send(
+      to,
+      `Order ${data.number} confirmed · Taplino`,
+      orderConfirmationTemplate(data),
+    );
+  }
+
+  async sendOrderNotificationEmail(
+    to: string,
+    data: OrderNotificationData,
+  ): Promise<void> {
+    await this.send(
+      to,
+      `New order ${data.number}: ${formatMoney(data.totalCents, data.currency)}`,
+      orderNotificationTemplate(data),
+    );
   }
 
   private async send(to: string, subject: string, html: string): Promise<void> {
     if (this.resend) {
-      const { error } = await this.resend.emails.send({ from: this.from, to, subject, html });
+      const { error } = await this.resend.emails.send({
+        from: this.from,
+        to,
+        subject,
+        html,
+      });
       if (error) {
-        logError(LogKey.EMAIL_RESEND_ERROR, 'Resend send failed', { to, subject, error });
+        logError(LogKey.EMAIL_RESEND_ERROR, 'Resend send failed', {
+          to,
+          subject,
+          error,
+        });
       } else {
         log(LogKey.EMAIL_RESEND_SEND, 'Email sent via Resend', { to, subject });
       }
@@ -130,4 +197,63 @@ function invitationTemplate(data: InvitationEmailData): string {
     <p style="margin:0 0 28px;font-size:15px;color:${MUTED};line-height:1.5"><strong>${data.inviterName}</strong> invited you to join <strong>${data.companyName}</strong> on Taplino as <strong>${roleLabel}</strong>.</p>
     ${button(data.acceptUrl, 'Accept invitation')}
     <p style="margin:28px 0 0;font-size:13px;color:#a1a1aa">This invitation expires in 7 days. If you don't have a Taplino account yet, you'll be asked to create one after clicking the link.</p>`);
+}
+
+// ─── Shop orders ─────────────────────────────────────────────────────────────
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatMoney(cents: number, currency: string): string {
+  return `${currency} ${(cents / 100).toFixed(2)}`;
+}
+
+function orderItemsTable(data: OrderEmailData): string {
+  const rows = data.items
+    .map(
+      (i) => `<tr>
+        <td style="padding:6px 0;font-size:14px;color:${INK}">${i.quantity} × ${escapeHtml(i.productName)}</td>
+        <td style="padding:6px 0;font-size:14px;color:${INK};text-align:right">${formatMoney(i.lineTotalCents, data.currency)}</td>
+      </tr>`,
+    )
+    .join('');
+  return `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border-top:1px solid #eee;border-bottom:1px solid #eee">
+    ${rows}
+    <tr>
+      <td style="padding:10px 0 6px;font-size:14px;font-weight:700;color:${INK}">Total (incl. VAT)</td>
+      <td style="padding:10px 0 6px;font-size:14px;font-weight:700;color:${INK};text-align:right">${formatMoney(data.totalCents, data.currency)}</td>
+    </tr>
+  </table>`;
+}
+
+function orderConfirmationTemplate(data: OrderEmailData): string {
+  const next = data.linkedCompanyName
+    ? `<p style="margin:0 0 24px;font-size:15px;color:${MUTED};line-height:1.5">Your cards have been added to <strong>${escapeHtml(data.linkedCompanyName)}</strong> in the Taplino app. Choose what each card opens while we produce them.</p>
+    ${button(data.appUrl, 'Open your orders')}`
+    : `<p style="margin:0 0 24px;font-size:15px;color:${MUTED};line-height:1.5">Create your free Taplino account with this email address to choose what your cards open, update it anytime and see tap statistics. Your order is linked automatically.</p>
+    ${button(data.appUrl, 'Create your account')}`;
+  return shell(`
+    <p style="margin:0 0 8px;font-size:22px;font-weight:700;color:${INK}">Thanks for your order, ${escapeHtml(data.customerName)}</p>
+    <p style="margin:0 0 24px;font-size:15px;color:${MUTED};line-height:1.5">We received your payment for order <strong>${escapeHtml(data.number)}</strong>. We will produce your cards and let you know when they ship.</p>
+    ${orderItemsTable(data)}
+    ${next}
+    <p style="margin:28px 0 0;font-size:13px;color:#a1a1aa">Questions about your order? Just reply to this email.</p>`);
+}
+
+function orderNotificationTemplate(data: OrderNotificationData): string {
+  return shell(`
+    <p style="margin:0 0 8px;font-size:22px;font-weight:700;color:${INK}">New paid order ${escapeHtml(data.number)}</p>
+    <p style="margin:0 0 24px;font-size:15px;color:${MUTED};line-height:1.5">${escapeHtml(data.customerName)} (${escapeHtml(data.email)})${
+      data.linkedCompanyName
+        ? `, linked to ${escapeHtml(data.linkedCompanyName)}`
+        : ', not linked to an account yet'
+    }.</p>
+    ${orderItemsTable(data)}
+    <p style="margin:0;font-size:14px;color:${MUTED}">Claim it in the admin console to fulfil it; whoever claims it becomes the customer's sales rep. Designs, shipping address and card slugs are under Orders (${escapeHtml(data.adminPath)}).</p>`);
 }

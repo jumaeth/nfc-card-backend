@@ -18,6 +18,8 @@
     "db:migrate:prod": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed:dev": "tsx prisma/seed-dev.ts",
+    "staff:grant": "tsx prisma/grant-staff.ts",
     "local:up": "docker compose up -d",
     "local:down": "docker compose down",
     "local:reset": "docker compose down -v && docker compose up -d",

@@ -9,8 +9,12 @@ datasource db {
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
+// Staff roles for the admin console. USER = regular customer account. SALES =
+// manages only the companies assigned to them (Company.salesRep). SUPPORT = reads
+// every customer, cannot change them. ADMIN / SUPER_ADMIN = manage everything.
 enum PlatformRole {
   USER
+  SALES
   SUPPORT
   ADMIN
   SUPER_ADMIN
@@ -77,6 +81,17 @@ enum CardType {
 
 // Lifecycle of a physical card. UNASSIGNED = printed/stocked but not yet linked
 // to a destination; ACTIVE = live and routing taps; DISABLED = temporarily off.
+// Shop order lifecycle. PENDING_PAYMENT until Stripe confirms; EXPIRED when the
+// checkout was abandoned (stock is released).
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  IN_PRODUCTION
+  SHIPPED
+  CANCELLED
+  EXPIRED
+}
+
 enum CardStatus {
   UNASSIGNED
   ACTIVE
@@ -113,6 +128,10 @@ model User {
 
   companyMembers  CompanyMember[]
   invitationsSent Invitation[]
+  // Customers (companies) this user looks after as a SALES rep.
+  salesCustomers  Company[]       @relation("CompanySalesRep")
+  // Shop orders this staff member claimed in the admin console.
+  handledOrders   Order[]         @relation("OrderHandler")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -201,15 +220,21 @@ model Company {
   // Default brand colours applied to new pages/cards (Taplino accent by default).
   brandColor   String  @default("#f0431f")
 
-  members       CompanyMember[]
-  locations     Location[]
-  cards         Card[]
-  pages         Page[]
-  tapEvents     TapEvent[]
-  invitations   Invitation[]
-  subscription  Subscription?
+  // The Taplino sales rep who owns this customer. Scopes the admin console for
+  // SALES staff; null = unassigned (only SUPPORT/ADMIN see it).
+  salesRepId String?
+  salesRep   User?   @relation("CompanySalesRep", fields: [salesRepId], references: [id], onDelete: SetNull)
+
+  members        CompanyMember[]
+  locations      Location[]
+  cards          Card[]
+  orders         Order[]
+  pages          Page[]
+  tapEvents      TapEvent[]
+  invitations    Invitation[]
+  subscription   Subscription?
   stripeCustomer StripeCustomer?
-  settings      CompanySettings?
+  settings       CompanySettings?
 
   // Soft-delete marker. A company is never hard-deleted; archived when its last
   // member archives their account. null = active.
@@ -219,6 +244,7 @@ model Company {
   updatedAt DateTime @updatedAt
 
   @@index([deletedAt])
+  @@index([salesRepId])
 }
 
 /// Per-company preferences layered on top of the subscription plan.
@@ -237,13 +263,17 @@ model CompanySettings {
 }
 
 model CompanyMember {
-  id          String       @id @default(cuid())
-  userId      String
-  companyId   String
-  role        CompanyRole  @default(MEMBER)
-  permissions Permission[] @default([])
+  id            String       @id @default(cuid())
+  userId        String
+  companyId     String
+  role          CompanyRole  @default(MEMBER)
+  permissions   Permission[] @default([])
   // Set when the member's user archives their account. null = active member.
   deactivatedAt DateTime?
+  // Set when the company (or staff) removes the member. Kept for history; an
+  // invitation reactivates the row. Separate from deactivatedAt so reclaiming
+  // an archived account does not undo a removal.
+  removedAt     DateTime?
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -254,6 +284,7 @@ model CompanyMember {
   @@unique([userId, companyId])
   @@index([companyId])
   @@index([companyId, deactivatedAt])
+  @@index([companyId, removedAt])
 }
 
 // ─── Locations (sites) ───────────────────────────────────────────────────────
@@ -261,10 +292,10 @@ model CompanyMember {
 // A physical site of a company (a restaurant, cafe, shop). Owns its own cards,
 // pages, address and Google review target.
 model Location {
-  id         String  @id @default(cuid())
-  name       String
-  companyId  String
-  isDefault  Boolean @default(false)
+  id        String  @id @default(cuid())
+  name      String
+  companyId String
+  isDefault Boolean @default(false)
 
   // Address / locale
   address    String?
@@ -281,10 +312,13 @@ model Location {
   cards   Card[]
   pages   Page[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  // Soft delete. Deleted rows are hidden everywhere but kept for history.
+  deletedAt DateTime?
 
   @@index([companyId])
+  @@index([companyId, deletedAt])
 }
 
 // ─── Pages (tap-destination content built in the builders) ───────────────────
@@ -305,17 +339,20 @@ model Page {
   // Kind-specific builder content (menu sections, links, wifi creds, ...).
   content    Json     @default("{}")
 
-  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  location Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  cards    Card[]
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  location  Location?  @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  cards     Card[]
   tapEvents TapEvent[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  // Soft delete. The slug stays reserved so an old link never shows other content.
+  deletedAt DateTime?
 
   @@index([companyId])
   @@index([locationId])
   @@index([kind])
+  @@index([companyId, deletedAt])
 }
 
 // ─── Cards (physical NFC products) ───────────────────────────────────────────
@@ -343,12 +380,20 @@ model Card {
   location  Location?  @relation(fields: [locationId], references: [id], onDelete: SetNull)
   tapEvents TapEvent[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  // The shop order this physical card was produced for, if any.
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  // Soft delete. The slug stays reserved so a printed card is never reused.
+  deletedAt DateTime?
 
   @@index([companyId])
   @@index([locationId])
   @@index([activePageId])
+  @@index([orderId])
+  @@index([companyId, deletedAt])
 }
 
 // ─── Analytics ───────────────────────────────────────────────────────────────
@@ -357,11 +402,11 @@ model Card {
 // endpoint via the privileged bypass (no tenant context there), read under RLS
 // on the dashboard.
 model TapEvent {
-  id        String   @id @default(cuid())
-  companyId String
-  cardId    String?
-  pageId    String?
-  kind      PageKind?
+  id         String    @id @default(cuid())
+  companyId  String
+  cardId     String?
+  pageId     String?
+  kind       PageKind?
   // Coarse client signal for the dashboard (no PII stored).
   country    String?
   deviceType String?
@@ -405,22 +450,121 @@ model Invitation {
 
 // Global price catalogue, shared by all tenants (NOT row-level secured).
 model SubscriptionPlan {
-  id       String  @id @default(cuid())
-  tier     PlanTier @unique
-  name     String
+  id            String          @id @default(cuid())
+  tier          PlanTier        @unique
+  name          String
   // Price in Rappen (CHF cents). 0 for the system/free baseline.
-  priceCents Int    @default(0)
-  interval BillingInterval @default(MONTHLY)
+  priceCents    Int             @default(0)
+  interval      BillingInterval @default(MONTHLY)
   // Stripe price id for self-serve checkout, if configured.
   stripePriceId String?
   // Feature flags/limits resolved by the billing service. e.g.
   // { multiLocation, analytics, unlimitedDestinationChanges, maxLocations }.
-  features Json    @default("{}")
+  features      Json            @default("{}")
 
   subscriptions Subscription[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Physical cards sold on the marketing site (global, NOT row-level secured).
+// `key` matches the website's card type ("business", "review").
+model Product {
+  id         String  @id @default(cuid())
+  key        String  @unique
+  name       String
+  // Base price per card in Rappen (CHF cents), before volume discounts.
+  priceCents Int
+  // Units left to sell. null = unlimited. Decremented as website orders come
+  // in; at 0 the site shows the product as currently not available.
+  stock      Int?
+  // Manual switch to take a product off sale regardless of stock.
+  active     Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Shop ────────────────────────────────────────────────────────────────────
+
+// A card order from the website (guest) or the app. Guest orders have no
+// company until the buyer links them from the app (matched by verified email).
+// Not row-level secured: companyId is null for guest orders, so access is
+// checked in OrdersService (member of the company, or staff).
+model Order {
+  id     String @id @default(cuid())
+  // Human-readable reference shown to customers, e.g. "TPL-7K3M9Q".
+  number String @unique
+
+  email           String
+  customerName    String
+  phone           String?
+  companyName     String?
+  // { line1, line2?, postalCode, city, country }
+  shippingAddress Json
+  locale          String  @default("de")
+
+  companyId      String?
+  company        Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  placedByUserId String?
+
+  // Staff member who claimed the order in the admin console and fulfils it.
+  // Claiming also makes them the sales rep of the order's business.
+  handledById String?
+  handledBy   User?     @relation("OrderHandler", fields: [handledById], references: [id], onDelete: SetNull)
+  handledAt   DateTime?
+
+  status OrderStatus @default(PENDING_PAYMENT)
+
+  subtotalCents Int
+  discountCents Int
+  shippingCents Int    @default(0)
+  totalCents    Int
+  currency      String @default("CHF")
+
+  stripeSessionId       String? @unique
+  stripePaymentIntentId String?
+  trackingNumber        String?
+
+  paidAt          DateTime?
+  claimedAt       DateTime?
+  shippedAt       DateTime?
+  cancelledAt     DateTime?
+  // Set once reserved stock has been given back (expired/cancelled), so it is
+  // never released twice.
+  stockReleasedAt DateTime?
+
+  items OrderItem[]
+  cards Card[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([companyId])
+  @@index([status])
+  @@index([handledById])
+}
+
+model OrderItem {
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productKey      String
+  productName     String
+  quantity        Int
+  unitPriceCents  Int
+  // Volume discount applied, in percent (e.g. 10).
+  discountPercent Int    @default(0)
+  lineTotalCents  Int
+  // The customer's card design (the editor's CardConfig, logo as data URL).
+  design          Json   @default("{}")
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
 }
 
 model Subscription {
@@ -447,9 +591,9 @@ model Subscription {
 }
 
 model StripeCustomer {
-  id               String  @id @default(cuid())
-  companyId        String  @unique
-  stripeCustomerId String  @unique
+  id               String @id @default(cuid())
+  companyId        String @unique
+  stripeCustomerId String @unique
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 

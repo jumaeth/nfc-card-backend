@@ -81,7 +81,8 @@ export class PublicService {
       include: { activePage: true },
     });
 
-    if (!card) {
+    // A deleted card answers exactly like one that never existed.
+    if (!card || card.deletedAt) {
       log(LogKey.TAP_RESOLVE_MISS, 'Card slug not found', { slug });
       throw new NotFoundException('Card not found');
     }
@@ -124,7 +125,7 @@ export class PublicService {
   async resolvePage(slug: string, req: Request) {
     const page = await this.prisma.$prisma.page.findUnique({ where: { slug } });
 
-    if (!page || !page.published) {
+    if (!page || page.deletedAt || !page.published) {
       throw new NotFoundException('Page not found');
     }
 

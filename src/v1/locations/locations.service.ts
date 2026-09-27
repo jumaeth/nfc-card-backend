@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import { softDeleteLocation } from '../../common/soft-delete.js';
 import { CompanyAccessService } from '../companies/company-access.service.js';
 import { BillingService } from '../billing/billing.service.js';
 import type { CreateLocationDto } from './dto/create-location.dto.js';
@@ -22,7 +23,7 @@ export class LocationsService {
   async findAll(companyId: string, userId: string) {
     await this.access.requireMember(userId, companyId);
     return this.prisma.location.findMany({
-      where: { companyId },
+      where: { companyId, deletedAt: null },
       orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
     });
   }
@@ -32,7 +33,9 @@ export class LocationsService {
 
     // The first location a company ever gets is always the default. Beyond that,
     // multiple locations are a Pro-plan feature gated by the subscription.
-    const existingCount = await this.prisma.location.count({ where: { companyId } });
+    const existingCount = await this.prisma.location.count({
+      where: { companyId, deletedAt: null },
+    });
 
     if (existingCount >= 1) {
       const features = await this.billing.getCompanyFeatures(companyId);
@@ -40,8 +43,14 @@ export class LocationsService {
         !features.multiLocation ||
         (features.maxLocations != null && existingCount >= features.maxLocations)
       ) {
+        const allowed = features.multiLocation ? features.maxLocations : 1;
+        const hint = await this.billing.upgradeHint(
+          features,
+          (f) => f.multiLocation && (f.maxLocations == null || existingCount < f.maxLocations),
+          'to add more',
+        );
         throw new ForbiddenException(
-          'Your plan includes a single location. Upgrade to Pro to add more.',
+          `Your plan includes ${allowed === 1 ? 'a single location' : `up to ${allowed} locations`}. ${hint}`,
         );
       }
     }
@@ -111,13 +120,13 @@ export class LocationsService {
     if (location.isDefault) {
       throw new BadRequestException('Set another location as default first.');
     }
-    await this.prisma.location.delete({ where: { id } });
+    await this.prisma.$transaction((tx) => softDeleteLocation(tx, id));
     return { id };
   }
 
   private async requireLocation(id: string, companyId: string) {
     const location = await this.prisma.location.findUnique({ where: { id } });
-    if (!location) throw new NotFoundException('Location not found');
+    if (!location || location.deletedAt) throw new NotFoundException('Location not found');
     if (location.companyId !== companyId) throw new ForbiddenException();
     return location;
   }

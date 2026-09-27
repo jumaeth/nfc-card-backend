@@ -143,7 +143,7 @@ export class AuthController {
     // behind BetterAuthGuard), so use the raw client and scope explicitly to the
     // authenticated user's own memberships.
     const privilegedCount = await this.prisma.$prisma.companyMember.count({
-      where: { userId: session.user.id, role: { in: PRIVILEGED_ROLES } },
+      where: { userId: session.user.id, role: { in: PRIVILEGED_ROLES }, removedAt: null },
     });
     return privilegedCount > 0;
   }

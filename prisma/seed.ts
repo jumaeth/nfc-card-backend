@@ -18,12 +18,13 @@ const PLANS = [
       maxLocations: 1,
       unlimitedDestinationChanges: false,
       managed: false,
+      createPages: false,
     },
   },
   {
     tier: 'PRO' as const,
     name: 'Pro',
-    priceCents: 3900, // CHF 39 / month
+    priceCents: 8900, // CHF 89 / month
     interval: 'MONTHLY' as const,
     features: {
       analytics: true,
@@ -31,6 +32,7 @@ const PLANS = [
       maxLocations: 10,
       unlimitedDestinationChanges: true,
       managed: false,
+      createPages: true,
     },
   },
   {
@@ -44,8 +46,16 @@ const PLANS = [
       maxLocations: null, // unlimited
       unlimitedDestinationChanges: true,
       managed: true,
+      createPages: true,
     },
   },
+];
+
+// Physical cards sold on the website. Created once; price and stock are then
+// managed in the admin console, so a re-seed never overwrites them.
+const PRODUCTS = [
+  { key: 'business', name: 'Metal business card', priceCents: 8900 }, // CHF 89 / card
+  { key: 'review', name: 'Review & menu card', priceCents: 5000 }, // CHF 50 / card
 ];
 
 async function main() {
@@ -67,6 +77,16 @@ async function main() {
 
   // eslint-disable-next-line no-console
   console.log(`Seeded ${PLANS.length} subscription plans.`);
+
+  for (const product of PRODUCTS) {
+    await prisma.product.upsert({
+      where: { key: product.key },
+      create: product,
+      update: {},
+    });
+  }
+  // eslint-disable-next-line no-console
+  console.log(`Seeded ${PRODUCTS.length} products.`);
   await prisma.$disconnect();
 }
 
