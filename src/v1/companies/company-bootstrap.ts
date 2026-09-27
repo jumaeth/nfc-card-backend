@@ -23,7 +23,7 @@ export async function bootstrapCompany(
     data: {
       name: input.name,
       slug: input.slug,
-      brandColor: '#f0431f',
+      brandColor: '#2f6df0',
       salesRepId: input.salesRepId ?? null,
     },
   });

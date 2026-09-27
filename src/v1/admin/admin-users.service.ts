@@ -41,7 +41,7 @@ export class AdminUsersService {
         ),
         viewsUsers: platformRoleAtLeast(role, 'SUPPORT'),
         managesUsers: platformRoleAtLeast(role, 'ADMIN'),
-        managesPlans: platformRoleAtLeast(role, 'ADMIN'),
+        managesPlans: platformRoleAtLeast(role, 'SUPER_ADMIN'),
         // Every staff role sees and can claim orders; ADMIN+ can take over.
         managesOrders: platformRoleAtLeast(role, 'SALES'),
         overridesOrders: platformRoleAtLeast(role, 'ADMIN'),

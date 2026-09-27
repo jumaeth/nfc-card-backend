@@ -39,8 +39,8 @@ export class AdminController {
     return this.users.listPlans();
   }
 
-  @ApiOperation({ summary: 'Edit a plan (ADMIN+)' })
-  @PlatformRoles('ADMIN')
+  @ApiOperation({ summary: 'Edit a plan (SUPER_ADMIN)' })
+  @PlatformRoles('SUPER_ADMIN')
   @Patch('plans/:planId')
   updatePlan(@CurrentUser() user: User, @Param('planId') planId: string, @Body() dto: UpdatePlanDto) {
     return this.users.updatePlan(user, planId, dto);

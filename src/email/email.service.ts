@@ -144,9 +144,9 @@ export class EmailService {
   }
 }
 
-// ─── Templates (Taplino styling: cream paper, ink text, orange accent) ───────
+// ─── Templates (Taplino styling: cream paper, ink text, blue accent) ───────
 
-const ACCENT = '#f0431f';
+const ACCENT = '#2f6df0';
 const INK = '#14120f';
 const MUTED = '#6c665b';
 

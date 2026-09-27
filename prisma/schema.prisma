@@ -218,7 +218,7 @@ model Company {
   logo         String?
   billingEmail String?
   // Default brand colours applied to new pages/cards (Taplino accent by default).
-  brandColor   String  @default("#f0431f")
+  brandColor   String  @default("#2f6df0")
 
   // The Taplino sales rep who owns this customer. Scopes the admin console for
   // SALES staff; null = unassigned (only SUPPORT/ADMIN see it).

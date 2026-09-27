@@ -39,9 +39,9 @@ export class AdminProductsController {
   }
 
   @ApiOperation({
-    summary: 'Edit a product price, stock or availability (ADMIN+)',
+    summary: 'Edit a product price, stock or availability (SUPER_ADMIN)',
   })
-  @PlatformRoles('ADMIN')
+  @PlatformRoles('SUPER_ADMIN')
   @Patch(':productId')
   update(
     @CurrentUser() user: User,

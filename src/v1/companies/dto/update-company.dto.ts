@@ -37,11 +37,11 @@ export class UpdateCompanyDto {
   @MaxLength(2048)
   logo?: string;
 
-  @ApiPropertyOptional({ example: '#f0431f' })
+  @ApiPropertyOptional({ example: '#2f6df0' })
   @IsOptional()
   @IsString()
   @Matches(/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, {
-    message: 'brandColor must be a hex colour, e.g. #f0431f',
+    message: 'brandColor must be a hex colour, e.g. #2f6df0',
   })
   brandColor?: string;
 }

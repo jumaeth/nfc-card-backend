@@ -98,7 +98,7 @@ async function ensureCompany(
   if (!company) {
     // Mirrors bootstrapCompany (src/v1/companies/company-bootstrap.ts).
     company = await tx.company.create({
-      data: { name: input.name, slug: input.slug, brandColor: '#f0431f' },
+      data: { name: input.name, slug: input.slug, brandColor: '#2f6df0' },
     });
     await tx.location.create({
       data: { companyId: company.id, name: 'Main', isDefault: true, country: 'CH' },

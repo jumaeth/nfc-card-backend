@@ -98,10 +98,10 @@ export class UpdateCustomerDto {
   @IsEmail()
   billingEmail?: string | null;
 
-  @ApiPropertyOptional({ example: '#f0431f' })
+  @ApiPropertyOptional({ example: '#2f6df0' })
   @IsOptional()
   @Matches(/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, {
-    message: 'brandColor must be a hex colour, e.g. #f0431f',
+    message: 'brandColor must be a hex colour, e.g. #2f6df0',
   })
   brandColor?: string;
 }
