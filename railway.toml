@@ -1,0 +1,9 @@
+[build]
+  builder = "railpack"
+
+[deploy]
+  startCommand = "pnpm db:migrate:prod && pnpm db:seed && pnpm start:prod"
+  healthcheckPath = "/api/v1/health"
+  healthcheckTimeout = 60
+  restartPolicyType = "on_failure"
+  restartPolicyMaxRetries = 3

@@ -1,0 +1,81 @@
+import type {
+  CompanyRole,
+  Permission,
+  PlatformRole,
+} from '../../generated/prisma/client.js';
+
+// Permissions granted to a role by default. Layered on top of any explicit
+// per-member grants.
+export const DEFAULT_ROLE_PERMISSIONS: Record<CompanyRole, Permission[]> = {
+  OWNER: ['MANAGE_CARDS', 'MANAGE_BILLING'],
+  ADMIN: ['MANAGE_CARDS'],
+  MEMBER: [],
+};
+
+export function hasPermission(
+  member: { role: CompanyRole; permissions: Permission[] },
+  permission: Permission,
+): boolean {
+  return (
+    DEFAULT_ROLE_PERMISSIONS[member.role].includes(permission) ||
+    member.permissions.includes(permission)
+  );
+}
+
+// Higher number = more privileged.
+export const ROLE_RANK: Record<CompanyRole, number> = {
+  MEMBER: 0,
+  ADMIN: 1,
+  OWNER: 2,
+};
+
+/** Roles allowed to manage tenant resources (cards, pages, locations). */
+export const ADMIN_ROLES: CompanyRole[] = ['ADMIN', 'OWNER'];
+
+/** Whether `requesterRole` may manage a member with `targetRole`. */
+export function canManageRole(
+  requesterRole: CompanyRole,
+  targetRole: CompanyRole,
+): boolean {
+  return ROLE_RANK[requesterRole] >= ROLE_RANK[targetRole];
+}
+
+// ─── Platform (staff) roles ──────────────────────────────────────────────────
+
+export const PLATFORM_ROLE_RANK: Record<PlatformRole, number> = {
+  USER: 0,
+  SUPPORT: 1,
+  ADMIN: 2,
+  SUPER_ADMIN: 3,
+};
+
+export const STAFF_PLATFORM_ROLES: PlatformRole[] = ['SUPPORT', 'ADMIN', 'SUPER_ADMIN'];
+
+export function platformRoleAtLeast(role: PlatformRole, minimum: PlatformRole): boolean {
+  return PLATFORM_ROLE_RANK[role] >= PLATFORM_ROLE_RANK[minimum];
+}
+
+// ─── Passkey enforcement ─────────────────────────────────────────────────────
+
+/** Privileged tenant roles that must hold a passkey session once enforcement is
+ *  on (OWNER/ADMIN). MEMBER may stay on password/Google. */
+export const PRIVILEGED_ROLES: CompanyRole[] = ['ADMIN', 'OWNER'];
+
+/** Error code returned when a privileged action needs a passkey-verified session. */
+export const PASSKEY_REQUIRED_CODE = 'PASSKEY_REQUIRED';
+
+/**
+ * Whether privileged-role passkey enforcement is active. Off by default so the
+ * backend can ship ahead of the app's passkey setup/step-up screens.
+ */
+export function passkeyEnforcementEnabled(config: {
+  get(key: string): string | undefined;
+}): boolean {
+  return (config.get('PASSKEY_ENFORCEMENT') ?? '').trim().toLowerCase() === 'true';
+}
+
+/**
+ * Session auth methods permitted to enroll a passkey. `passkey` (already strong)
+ * or `email-otp` (proved email possession) — never `password`/`google` alone.
+ */
+export const PASSKEY_ENROLL_METHODS = ['passkey', 'email-otp'];

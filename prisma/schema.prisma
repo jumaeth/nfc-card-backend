@@ -1,0 +1,458 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum PlatformRole {
+  USER
+  SUPPORT
+  ADMIN
+  SUPER_ADMIN
+}
+
+// Role a user holds inside a single tenant (Company). OWNER > ADMIN > MEMBER.
+enum CompanyRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum Permission {
+  MANAGE_CARDS
+  MANAGE_BILLING
+}
+
+enum PlanTier {
+  STARTER
+  PRO
+  MANAGED
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+  ONE_TIME
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  PAUSED
+}
+
+// How a subscription came to exist. STRIPE = self-serve checkout + webhooks.
+// MANUAL = assigned by platform staff (a comp). SYSTEM = the free plan every
+// company gets on creation.
+enum SubscriptionSource {
+  STRIPE
+  MANUAL
+  SYSTEM
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  CANCELLED
+}
+
+// The product/experience a physical NFC card is sold as. Mirrors the site's
+// product range: a Google review card, a live digital menu, a link hub, a
+// contact (vCard) card, or a one-tap WiFi card.
+enum CardType {
+  REVIEW
+  MENU
+  LINKHUB
+  VCARD
+  WIFI
+}
+
+// Lifecycle of a physical card. UNASSIGNED = printed/stocked but not yet linked
+// to a destination; ACTIVE = live and routing taps; DISABLED = temporarily off.
+enum CardStatus {
+  UNASSIGNED
+  ACTIVE
+  DISABLED
+}
+
+// The kind of tap destination a Page renders. One Page model holds all builder
+// content as validated JSON keyed by this discriminator.
+enum PageKind {
+  REVIEW
+  MENU
+  LINKHUB
+  VCARD
+  WIFI
+}
+
+// ─── Auth (managed by better-auth — do not rename fields) ────────────────────
+
+model User {
+  id            String       @id
+  name          String       @default("")
+  email         String       @unique
+  emailVerified Boolean      @default(false)
+  image         String?
+  avatarUrl     String?
+  platformRole  PlatformRole @default(USER)
+  // Soft-delete marker. Account deletion archives the user (keeps the row and
+  // its business data) so it can be reclaimed on re-registration. null = active.
+  deletedAt     DateTime?
+
+  sessions Session[]
+  accounts Account[]
+  passkeys Passkey[]
+
+  companyMembers  CompanyMember[]
+  invitationsSent Invitation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([deletedAt])
+}
+
+model Session {
+  id         String   @id
+  expiresAt  DateTime
+  token      String   @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  ipAddress  String?
+  userAgent  String?
+  // How this session authenticated: password | passkey | google | email-otp.
+  authMethod String?
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?   @db.Text
+  refreshToken          String?   @db.Text
+  idToken               String?   @db.Text
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@index([expiresAt])
+}
+
+// WebAuthn/FIDO2 passkey credential, managed by better-auth's passkey plugin.
+// NOT under row-level security: read/written pre-tenant-context during sign-in.
+model Passkey {
+  id           String   @id
+  name         String?
+  publicKey    String
+  userId       String
+  credentialID String
+  counter      Int
+  deviceType   String
+  backedUp     Boolean
+  transports   String?
+  aaguid       String?
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([credentialID])
+}
+
+// ─── Company (tenant) ────────────────────────────────────────────────────────
+
+model Company {
+  id           String  @id @default(cuid())
+  name         String
+  slug         String  @unique
+  logo         String?
+  billingEmail String?
+  // Default brand colours applied to new pages/cards (Taplino accent by default).
+  brandColor   String  @default("#f0431f")
+
+  members       CompanyMember[]
+  locations     Location[]
+  cards         Card[]
+  pages         Page[]
+  tapEvents     TapEvent[]
+  invitations   Invitation[]
+  subscription  Subscription?
+  stripeCustomer StripeCustomer?
+  settings      CompanySettings?
+
+  // Soft-delete marker. A company is never hard-deleted; archived when its last
+  // member archives their account. null = active.
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([deletedAt])
+}
+
+/// Per-company preferences layered on top of the subscription plan.
+model CompanySettings {
+  id        String  @id @default(cuid())
+  companyId String  @unique
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  // Collect anonymised tap analytics (taps, page views, review clicks).
+  analyticsEnabled Boolean @default(true)
+  // Default display language for public pages when a visitor has no preference.
+  defaultLocale    String  @default("de")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CompanyMember {
+  id          String       @id @default(cuid())
+  userId      String
+  companyId   String
+  role        CompanyRole  @default(MEMBER)
+  permissions Permission[] @default([])
+  // Set when the member's user archives their account. null = active member.
+  deactivatedAt DateTime?
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, companyId])
+  @@index([companyId])
+  @@index([companyId, deactivatedAt])
+}
+
+// ─── Locations (sites) ───────────────────────────────────────────────────────
+
+// A physical site of a company (a restaurant, cafe, shop). Owns its own cards,
+// pages, address and Google review target.
+model Location {
+  id         String  @id @default(cuid())
+  name       String
+  companyId  String
+  isDefault  Boolean @default(false)
+
+  // Address / locale
+  address    String?
+  city       String?
+  postalCode String?
+  country    String  @default("CH")
+  timezone   String  @default("Europe/Zurich")
+
+  // Google review integration (used by REVIEW pages by default).
+  googlePlaceId   String?
+  googleReviewUrl String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  cards   Card[]
+  pages   Page[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId])
+}
+
+// ─── Pages (tap-destination content built in the builders) ───────────────────
+
+// A single tap destination. `content` holds the builder output as validated
+// JSON, shaped per `kind` (see the DTOs). A page has its own public slug so it
+// can be shared directly, and cards point at it via Card.activePage.
+model Page {
+  id         String   @id @default(cuid())
+  companyId  String
+  locationId String?
+  kind       PageKind
+  name       String
+  slug       String   @unique
+  published  Boolean  @default(false)
+  // Visual theme for the rendered page: { brandColor, background, logoUrl, ... }.
+  theme      Json     @default("{}")
+  // Kind-specific builder content (menu sections, links, wifi creds, ...).
+  content    Json     @default("{}")
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  location Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  cards    Card[]
+  tapEvents TapEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([locationId])
+  @@index([kind])
+}
+
+// ─── Cards (physical NFC products) ───────────────────────────────────────────
+
+model Card {
+  id         String     @id @default(cuid())
+  companyId  String
+  locationId String?
+  name       String
+  type       CardType
+  // Public identifier printed/encoded on the card. Used in the tap URL /c/[slug].
+  slug       String     @unique
+  // Optional hardware UID of the NFC chip (for provisioning/verification).
+  uid        String?    @unique
+  status     CardStatus @default(UNASSIGNED)
+  // Physical/landing design: { template, logoUrl, primaryColor, textColor, finish }.
+  design     Json       @default("{}")
+
+  // The page a tap currently routes to. Re-pointable at any time ("change
+  // destination anytime").
+  activePageId String?
+  activePage   Page?   @relation(fields: [activePageId], references: [id], onDelete: SetNull)
+
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  location  Location?  @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  tapEvents TapEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([locationId])
+  @@index([activePageId])
+}
+
+// ─── Analytics ───────────────────────────────────────────────────────────────
+
+// One row per public tap / page view. Written from the unauthenticated public
+// endpoint via the privileged bypass (no tenant context there), read under RLS
+// on the dashboard.
+model TapEvent {
+  id        String   @id @default(cuid())
+  companyId String
+  cardId    String?
+  pageId    String?
+  kind      PageKind?
+  // Coarse client signal for the dashboard (no PII stored).
+  country    String?
+  deviceType String?
+  referrer   String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  card    Card?   @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  page    Page?   @relation(fields: [pageId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([cardId])
+  @@index([pageId])
+}
+
+// ─── Invitations ─────────────────────────────────────────────────────────────
+
+model Invitation {
+  id          String           @id @default(cuid())
+  email       String
+  companyId   String
+  role        CompanyRole      @default(MEMBER)
+  token       String           @unique
+  code        String           @unique
+  status      InvitationStatus @default(PENDING)
+  expiresAt   DateTime
+  invitedById String
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invitedBy User    @relation(fields: [invitedById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([email])
+}
+
+// ─── Billing (plan gating; Stripe integration is optional/light) ─────────────
+
+// Global price catalogue, shared by all tenants (NOT row-level secured).
+model SubscriptionPlan {
+  id       String  @id @default(cuid())
+  tier     PlanTier @unique
+  name     String
+  // Price in Rappen (CHF cents). 0 for the system/free baseline.
+  priceCents Int    @default(0)
+  interval BillingInterval @default(MONTHLY)
+  // Stripe price id for self-serve checkout, if configured.
+  stripePriceId String?
+  // Feature flags/limits resolved by the billing service. e.g.
+  // { multiLocation, analytics, unlimitedDestinationChanges, maxLocations }.
+  features Json    @default("{}")
+
+  subscriptions Subscription[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Subscription {
+  id        String @id @default(cuid())
+  companyId String @unique
+  planId    String
+
+  status   SubscriptionStatus @default(ACTIVE)
+  source   SubscriptionSource @default(SYSTEM)
+  interval BillingInterval    @default(MONTHLY)
+
+  currentPeriodStart DateTime @default(now())
+  currentPeriodEnd   DateTime
+
+  stripeSubscriptionId String?
+
+  company Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  plan    SubscriptionPlan @relation(fields: [planId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([planId])
+}
+
+model StripeCustomer {
+  id               String  @id @default(cuid())
+  companyId        String  @unique
+  stripeCustomerId String  @unique
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

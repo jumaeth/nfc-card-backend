@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: taplino
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # Local mail catcher. Verification / invite / OTP emails land here in dev.
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "1027:1025" # SMTP
+      - "8027:8025" # Web UI → http://localhost:8027
+
+volumes:
+  postgres_data:

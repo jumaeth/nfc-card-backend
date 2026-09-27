@@ -1,0 +1,52 @@
+export const LogKey = {
+  // Email
+  EMAIL_RESEND_SEND: 'email.resend.send',
+  EMAIL_RESEND_ERROR: 'email.resend.error',
+  EMAIL_SMTP_SEND: 'email.smtp.send',
+  EMAIL_NOOP: 'email.noop',
+  EMAIL_NO_TRANSPORT: 'email.no_transport',
+
+  // Auth
+  AUTH_VERIFICATION_SENT: 'auth.verification.sent',
+  AUTH_VERIFICATION_ERROR: 'auth.verification.error',
+  AUTH_REQUEST: 'auth.request',
+
+  // Account lifecycle
+  ACCOUNT_RECLAIMED: 'account.reclaimed',
+  ACCOUNT_RECLAIM_ERROR: 'account.reclaim.error',
+
+  // Companies / tenancy
+  COMPANY_CREATED: 'company.created',
+  INVITATION_SENT: 'invitation.sent',
+  INVITATION_ACCEPTED: 'invitation.accepted',
+
+  // Cards / pages
+  CARD_CREATED: 'card.created',
+  CARD_LINKED: 'card.linked',
+  PAGE_PUBLISHED: 'page.published',
+
+  // Public tap
+  TAP_RECORDED: 'tap.recorded',
+  TAP_RESOLVE_MISS: 'tap.resolve.miss',
+
+  // Billing
+  BILLING_CHECKOUT_CREATED: 'billing.checkout.created',
+  BILLING_WEBHOOK_RECEIVED: 'billing.webhook.received',
+  BILLING_WEBHOOK_ERROR: 'billing.webhook.error',
+  BILLING_SUBSCRIPTION_UPDATED: 'billing.subscription.updated',
+
+  // App lifecycle
+  APP_BOOTSTRAP: 'app.bootstrap',
+  APP_ERROR: 'app.error',
+  APP_UNHANDLED_REJECTION: 'app.unhandled_rejection',
+  APP_UNCAUGHT_EXCEPTION: 'app.uncaught_exception',
+
+  // Database / connectivity
+  DB_CONNECT_RETRY: 'db.connect.retry',
+  DB_CONNECT_OK: 'db.connect.ok',
+  DB_CONNECT_FAILED: 'db.connect.failed',
+  DB_HEALTH_DOWN: 'db.health.down',
+  DB_UNAVAILABLE: 'db.unavailable',
+} as const;
+
+export type LogKeyValue = (typeof LogKey)[keyof typeof LogKey];

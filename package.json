@@ -1,0 +1,79 @@
+{
+  "name": "nfc-card-backend",
+  "version": "0.1.0",
+  "description": "Taplino NFC platform API (multi-tenant NestJS + Prisma)",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "scripts": {
+    "build": "nest build",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "start": "nest start",
+    "start:dev": "NODE_ENV=development nest start --watch",
+    "start:debug": "NODE_ENV=development nest start --debug --watch",
+    "start:prod": "node dist/src/main.js",
+    "lint": "eslint \"{src,test}/**/*.ts\" --fix",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:prod": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "db:seed": "tsx prisma/seed.ts",
+    "local:up": "docker compose up -d",
+    "local:down": "docker compose down",
+    "local:reset": "docker compose down -v && docker compose up -d",
+    "postinstall": "prisma generate"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@better-auth/passkey": "1.7.1",
+    "@nestjs/common": "^11.0.1",
+    "@nestjs/config": "^4.0.4",
+    "@nestjs/core": "^11.0.1",
+    "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/swagger": "^11.4.4",
+    "@nestjs/throttler": "^6.7.0",
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "7.3.0",
+    "@scalar/nestjs-api-reference": "^1.1.19",
+    "better-auth": "^1.7.1",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "dotenv": "^17.4.2",
+    "nanoid": "^5.0.9",
+    "nodemailer": "^8.0.8",
+    "pg": "^8.21.0",
+    "reflect-metadata": "^0.2.2",
+    "resend": "^6.12.3",
+    "rxjs": "^7.8.1",
+    "stripe": "^22.1.1"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.2.0",
+    "@eslint/js": "^9.18.0",
+    "@nestjs/cli": "^11.0.0",
+    "@nestjs/schematics": "^11.0.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "@types/nodemailer": "^8.0.0",
+    "@types/pg": "^8.20.0",
+    "eslint": "^9.18.0",
+    "eslint-config-prettier": "^10.0.1",
+    "eslint-plugin-prettier": "^5.2.2",
+    "globals": "^17.0.0",
+    "prettier": "^3.4.2",
+    "prisma": "7.3.0",
+    "tsx": "^4.22.3",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0"
+  },
+  "pnpm": {
+    "allowedBuildScripts": [
+      "@nestjs/core",
+      "@prisma/engines",
+      "prisma",
+      "unrs-resolver"
+    ]
+  }
+}
