@@ -33,7 +33,11 @@ export class CardsService {
   async findAll(companyId: string, userId: string, locationId?: string) {
     await this.access.requireMember(userId, companyId);
     return this.prisma.card.findMany({
-      where: { companyId, deletedAt: null, ...(locationId ? { locationId } : {}) },
+      where: {
+        companyId,
+        deletedAt: null,
+        ...(locationId ? { locationId } : {}),
+      },
       include: { activePage: ACTIVE_PAGE_SELECT, location: LOCATION_SELECT },
       orderBy: { createdAt: 'desc' },
     });
@@ -55,6 +59,7 @@ export class CardsService {
         name: dto.name,
         type: dto.type,
         locationId: dto.locationId ?? null,
+        area: dto.area?.trim() || null,
         slug,
         uid: dto.uid ?? null,
         status: 'UNASSIGNED',
@@ -82,7 +87,12 @@ export class CardsService {
   }
 
   /** Update card metadata. */
-  async update(id: string, companyId: string, userId: string, dto: UpdateCardDto) {
+  async update(
+    id: string,
+    companyId: string,
+    userId: string,
+    dto: UpdateCardDto,
+  ) {
     await this.access.requireManager(userId, companyId);
     await this.requireCard(id, companyId);
 
@@ -93,7 +103,9 @@ export class CardsService {
     const data: Prisma.CardUpdateInput = {};
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.status !== undefined) data.status = dto.status;
-    if (dto.design !== undefined) data.design = dto.design as Prisma.InputJsonValue;
+    if (dto.area !== undefined) data.area = dto.area?.trim() || null;
+    if (dto.design !== undefined)
+      data.design = dto.design as Prisma.InputJsonValue;
     // locationId: a string reassigns, an explicit null detaches.
     if (dto.locationId !== undefined) {
       data.location = dto.locationId
@@ -138,11 +150,15 @@ export class CardsService {
       include: { activePage: true, location: LOCATION_SELECT },
     });
 
-    log(LogKey.CARD_LINKED, linked ? 'Card destination set' : 'Card destination cleared', {
-      cardId: card.id,
-      companyId,
-      pageId: pageId ?? null,
-    });
+    log(
+      LogKey.CARD_LINKED,
+      linked ? 'Card destination set' : 'Card destination cleared',
+      {
+        cardId: card.id,
+        companyId,
+        pageId: pageId ?? null,
+      },
+    );
 
     return card;
   }
@@ -207,6 +223,8 @@ export class CardsService {
       });
       if (!clash) return candidate;
     }
-    throw new BadRequestException('Could not generate a unique slug, please retry');
+    throw new BadRequestException(
+      'Could not generate a unique slug, please retry',
+    );
   }
 }

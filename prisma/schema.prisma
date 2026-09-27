@@ -232,6 +232,7 @@ model Company {
   pages            Page[]
   translationUsage TranslationUsage[]
   designTemplates  DesignTemplate[]
+  wifiGuests       WifiGuest[]
   tapEvents        TapEvent[]
   invitations      Invitation[]
   subscription     Subscription?
@@ -346,6 +347,7 @@ model Page {
   cards            Card[]
   tapEvents        TapEvent[]
   translationUsage TranslationUsage[]
+  wifiGuests       WifiGuest[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -398,6 +400,42 @@ model TranslationUsage {
   @@index([pageId])
 }
 
+// A guest who asked for the Wi-Fi password on a WIFI page with guest access
+// on (Page.content.guestAccess). One row per page and email; repeat visits
+// update it. The code fields hold the pending email code (hashed) in "verify"
+// mode. Rows without marketing consent are deleted after 12 months of no visit.
+model WifiGuest {
+  id        String @id @default(cuid())
+  companyId String
+  pageId    String
+  email     String
+  // Language the guest saw the form (and the privacy note) in.
+  locale    String @default("de")
+
+  verified         Boolean   @default(false)
+  verifiedAt       DateTime?
+  // Opt-in to marketing emails from the business. Never pre-ticked.
+  marketingConsent Boolean   @default(false)
+  consentAt        DateTime?
+
+  codeHash      String?
+  codeExpiresAt DateTime?
+  codeSentAt    DateTime?
+  codeAttempts  Int       @default(0)
+
+  visits     Int      @default(1)
+  lastSeenAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  page    Page    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([pageId, email])
+  @@index([companyId, lastSeenAt])
+}
+
 // ─── Cards (physical NFC products) ───────────────────────────────────────────
 
 model Card {
@@ -406,6 +444,9 @@ model Card {
   locationId String?
   name       String
   type       CardType
+  // Optional zone inside the location ("Terrasse", "Saal", "Bar"), so a
+  // restaurant with many tables can group its cards.
+  area       String?
   // Public identifier printed/encoded on the card. Used in the tap URL /c/[slug].
   slug       String     @unique
   // Optional hardware UID of the NFC chip (for provisioning/verification).

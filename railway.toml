@@ -2,7 +2,9 @@
   builder = "railpack"
 
 [deploy]
-  startCommand = "pnpm db:migrate:prod && pnpm db:seed && pnpm start:prod"
+  # The demo business (prisma/seed-demo.ts) is reset on every deploy. It never
+  # blocks startup: without DEMO_PASSWORD it skips, and a failure is only logged.
+  startCommand = "pnpm db:migrate:prod && pnpm db:seed && (pnpm db:seed:demo || true) && pnpm start:prod"
   healthcheckPath = "/api/v1/health"
   healthcheckTimeout = 60
   restartPolicyType = "on_failure"

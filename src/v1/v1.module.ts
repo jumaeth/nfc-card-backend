@@ -15,6 +15,7 @@ import { OrdersModule } from './orders/orders.module.js';
 import { TranslateModule } from './translate/translate.module.js';
 import { UploadsModule } from './uploads/uploads.module.js';
 import { DesignTemplatesModule } from './design-templates/design-templates.module.js';
+import { WifiModule } from './wifi/wifi.module.js';
 import { HealthController } from './health/health.controller.js';
 
 @Module({
@@ -35,6 +36,7 @@ import { HealthController } from './health/health.controller.js';
     TranslateModule,
     UploadsModule,
     DesignTemplatesModule,
+    WifiModule,
   ],
   controllers: [HealthController],
 })

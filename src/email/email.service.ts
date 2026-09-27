@@ -23,6 +23,13 @@ interface OrderEmailData {
   appUrl: string;
 }
 
+interface WifiCodeEmailData {
+  code: string;
+  businessName: string;
+  ssid: string;
+  locale: string;
+}
+
 interface OrderNotificationData extends OrderEmailData {
   email: string;
   adminPath: string;
@@ -91,6 +98,18 @@ export class EmailService {
       to,
       `Reset your Taplino password: ${code}`,
       passwordResetOtpTemplate(code),
+    );
+  }
+
+  /** Guest Wi-Fi code, in the language the guest used on the page. */
+  async sendWifiCodeEmail(to: string, data: WifiCodeEmailData): Promise<void> {
+    const copy =
+      WIFI_CODE_COPY[data.locale as keyof typeof WIFI_CODE_COPY] ??
+      WIFI_CODE_COPY.de;
+    await this.send(
+      to,
+      copy.subject(data.code, data.businessName),
+      wifiCodeTemplate(data, copy),
     );
   }
 
@@ -197,6 +216,58 @@ function invitationTemplate(data: InvitationEmailData): string {
     <p style="margin:0 0 28px;font-size:15px;color:${MUTED};line-height:1.5"><strong>${data.inviterName}</strong> invited you to join <strong>${data.companyName}</strong> on Taplino as <strong>${roleLabel}</strong>.</p>
     ${button(data.acceptUrl, 'Accept invitation')}
     <p style="margin:28px 0 0;font-size:13px;color:#a1a1aa">This invitation expires in 7 days. If you don't have a Taplino account yet, you'll be asked to create one after clicking the link.</p>`);
+}
+
+// ─── Wi-Fi guest code ────────────────────────────────────────────────────────
+
+const WIFI_CODE_COPY = {
+  de: {
+    subject: (code: string, name: string) =>
+      `${code} ist dein WLAN-Code für ${name}`,
+    title: 'Dein WLAN-Code',
+    body: (name: string, ssid: string) =>
+      `Gib diesen Code auf der Seite von <strong>${name}</strong> ein, um dich mit <strong>${ssid}</strong> zu verbinden.`,
+    footer:
+      'Der Code ist 10 Minuten gültig. Wenn du ihn nicht angefordert hast, kannst du diese E-Mail ignorieren.',
+  },
+  en: {
+    subject: (code: string, name: string) =>
+      `${code} is your Wi-Fi code for ${name}`,
+    title: 'Your Wi-Fi code',
+    body: (name: string, ssid: string) =>
+      `Enter this code on the <strong>${name}</strong> page to connect to <strong>${ssid}</strong>.`,
+    footer:
+      "The code is valid for 10 minutes. If you didn't request it, you can ignore this email.",
+  },
+  fr: {
+    subject: (code: string, name: string) =>
+      `${code} est votre code Wi-Fi pour ${name}`,
+    title: 'Votre code Wi-Fi',
+    body: (name: string, ssid: string) =>
+      `Saisissez ce code sur la page de <strong>${name}</strong> pour vous connecter à <strong>${ssid}</strong>.`,
+    footer:
+      "Le code est valable 10 minutes. Si vous ne l'avez pas demandé, ignorez cet e-mail.",
+  },
+  it: {
+    subject: (code: string, name: string) =>
+      `${code} è il tuo codice Wi-Fi per ${name}`,
+    title: 'Il tuo codice Wi-Fi',
+    body: (name: string, ssid: string) =>
+      `Inserisci questo codice sulla pagina di <strong>${name}</strong> per connetterti a <strong>${ssid}</strong>.`,
+    footer:
+      'Il codice è valido 10 minuti. Se non l’hai richiesto, ignora questa e-mail.',
+  },
+};
+
+function wifiCodeTemplate(
+  data: WifiCodeEmailData,
+  copy: (typeof WIFI_CODE_COPY)['de'],
+): string {
+  return shell(`
+    <p style="margin:0 0 8px;font-size:22px;font-weight:700;color:${INK}">${copy.title}</p>
+    <p style="margin:0 0 24px;font-size:15px;color:${MUTED};line-height:1.5">${copy.body(escapeHtml(data.businessName), escapeHtml(data.ssid))}</p>
+    <p style="margin:0 0 24px;font-size:34px;font-weight:700;letter-spacing:8px;color:${INK}">${data.code}</p>
+    <p style="margin:0;font-size:13px;color:#a1a1aa">${copy.footer}</p>`);
 }
 
 // ─── Shop orders ─────────────────────────────────────────────────────────────

@@ -19,6 +19,7 @@
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:dev": "tsx prisma/seed-dev.ts",
+    "db:seed:demo": "tsx prisma/seed-demo.ts",
     "staff:grant": "tsx prisma/grant-staff.ts",
     "local:up": "docker compose up -d",
     "local:down": "docker compose down",

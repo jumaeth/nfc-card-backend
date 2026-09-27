@@ -27,11 +27,22 @@ export class CreateCardDto {
 
   @ApiProperty({
     required: false,
-    description: 'Location this card belongs to. Must belong to the same company.',
+    description:
+      'Location this card belongs to. Must belong to the same company.',
   })
   @IsOptional()
   @IsString()
   locationId?: string;
+
+  @ApiProperty({
+    required: false,
+    example: 'Terrasse',
+    description: 'Zone inside the location, used to group cards (e.g. tables).',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  area?: string;
 
   @ApiProperty({
     required: false,
@@ -49,7 +60,8 @@ export class CreateCardDto {
   @ApiProperty({
     required: false,
     type: Object,
-    description: 'Physical/landing design JSON: { template, logoUrl, primaryColor, ... }.',
+    description:
+      'Physical/landing design JSON: { template, logoUrl, primaryColor, ... }.',
   })
   @IsOptional()
   @IsObject()
@@ -57,7 +69,8 @@ export class CreateCardDto {
 
   @ApiProperty({
     required: false,
-    description: 'Optional hardware UID of the NFC chip (for provisioning/verification).',
+    description:
+      'Optional hardware UID of the NFC chip (for provisioning/verification).',
   })
   @IsOptional()
   @IsString()

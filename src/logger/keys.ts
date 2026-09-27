@@ -45,6 +45,11 @@ export const LogKey = {
   TAP_RECORDED: 'tap.recorded',
   TAP_RESOLVE_MISS: 'tap.resolve.miss',
 
+  // Wi-Fi guest access
+  WIFI_ACCESS_GRANTED: 'wifi.access.granted',
+  WIFI_CODE_SENT: 'wifi.code.sent',
+  WIFI_CODE_FAILED: 'wifi.code.failed',
+
   // Billing
   BILLING_CHECKOUT_CREATED: 'billing.checkout.created',
   BILLING_WEBHOOK_RECEIVED: 'billing.webhook.received',

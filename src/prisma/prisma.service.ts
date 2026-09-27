@@ -90,6 +90,9 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get designTemplate() {
     return this.client.designTemplate;
   }
+  get wifiGuest() {
+    return this.client.wifiGuest;
+  }
 
   // ─── Global catalogue (not RLS-secured) ─────────────────────────────────────
   get subscriptionPlan() {

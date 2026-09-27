@@ -43,6 +43,7 @@ pnpm local:up                   # Postgres + Mailpit via docker compose
 pnpm db:migrate                 # applies init + RLS migrations
 pnpm db:seed                    # seeds the Starter/Pro/Managed plans
 pnpm db:seed:dev                # local only: dev logins per plan (app) and per staff role (admin)
+pnpm db:seed:demo               # demo business with fake data for sales demos (runs on deploy)
 pnpm start:dev                  # http://localhost:3311, docs at /docs
 pnpm staff:grant you@taplino.ch SUPER_ADMIN   # optional: admin console access
 ```
@@ -51,6 +52,13 @@ pnpm staff:grant you@taplino.ch SUPER_ADMIN   # optional: admin console access
 > run. All use the password `taplino-dev`: `dev@`, `starter@`, `pro@`, `managed@`
 > (app, one per plan) and `superadmin@`, `admin@`, `support@`, `sales@` (admin
 > console, one per role), all `@taplino.ch`. See the app and admin READMEs.
+
+> `db:seed:demo` creates or resets **Trattoria Sole** (Managed plan): 2 locations,
+> 7 published pages in de/en/fr/it, 35 cards grouped by area, 90 days of tap
+> analytics and a list of Wi-Fi guests. Login
+> `demo@taplino.ch` (password `taplino-dev` locally). Production runs it on every
+> deploy once the `DEMO_PASSWORD` variable is set (skipped without it), which also
+> undoes changes made during demos and moves the analytics up to today.
 
 > The plan seed is required: company creation assigns the Starter plan as the
 > SYSTEM baseline. Run `pnpm db:seed` before signing up.

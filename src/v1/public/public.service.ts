@@ -1,8 +1,29 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service.js';
-import type { PageKind } from '../../../generated/prisma/client.js';
+import type { Page, PageKind } from '../../../generated/prisma/client.js';
 import { log, LogKey } from '../../logger/index.js';
+import { publicWifiContent } from '../wifi/wifi-content.js';
+import type { WifiContent } from '../wifi/wifi-content.js';
+
+/**
+ * A page as the public views get it. `companyName` names the business in the
+ * Wi-Fi privacy note; gated Wi-Fi pages never include the password.
+ */
+function publicPage(page: Page, companyName: string) {
+  return {
+    id: page.id,
+    kind: page.kind,
+    name: page.name,
+    theme: page.theme,
+    content:
+      page.kind === 'WIFI'
+        ? publicWifiContent(page.content as WifiContent)
+        : page.content,
+    slug: page.slug,
+    companyName,
+  };
+}
 
 /** Arguments for a single analytics write. Any of card/page may be absent. */
 interface RecordTapArgs {
@@ -78,7 +99,7 @@ export class PublicService {
   async resolveCard(slug: string, req: Request) {
     const card = await this.prisma.$prisma.card.findUnique({
       where: { slug },
-      include: { activePage: true },
+      include: { activePage: true, company: { select: { name: true } } },
     });
 
     // A deleted card answers exactly like one that never existed.
@@ -107,14 +128,7 @@ export class PublicService {
     return {
       status: 'ok' as const,
       card: { id: card.id, name: card.name, type: card.type, design: card.design },
-      page: {
-        id: page.id,
-        kind: page.kind,
-        name: page.name,
-        theme: page.theme,
-        content: page.content,
-        slug: page.slug,
-      },
+      page: publicPage(page, card.company.name),
     };
   }
 
@@ -123,7 +137,10 @@ export class PublicService {
    * or unpublished pages 404. Records a tap on success.
    */
   async resolvePage(slug: string, req: Request) {
-    const page = await this.prisma.$prisma.page.findUnique({ where: { slug } });
+    const page = await this.prisma.$prisma.page.findUnique({
+      where: { slug },
+      include: { company: { select: { name: true } } },
+    });
 
     if (!page || page.deletedAt || !page.published) {
       throw new NotFoundException('Page not found');
@@ -138,14 +155,7 @@ export class PublicService {
 
     return {
       status: 'ok' as const,
-      page: {
-        id: page.id,
-        kind: page.kind,
-        name: page.name,
-        theme: page.theme,
-        content: page.content,
-        slug: page.slug,
-      },
+      page: publicPage(page, page.company.name),
     };
   }
 }
