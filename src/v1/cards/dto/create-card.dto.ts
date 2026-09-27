@@ -48,7 +48,7 @@ export class CreateCardDto {
     required: false,
     example: 'cafe-central',
     description:
-      'Public tap slug (/c/[slug]). Lowercase letters, digits and hyphens, 3-40 chars. Auto-generated when omitted.',
+      'Card link within the company (/c/<company slug>/<slug>). Lowercase letters, digits and hyphens, 3-40 chars. Made from the name when omitted.',
   })
   @IsOptional()
   @IsString()

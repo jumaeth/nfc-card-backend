@@ -17,7 +17,9 @@ import type { CardType, PageKind, Prisma } from '../generated/prisma/client.js';
 // login (default demo@taplino.ch).
 const EMAIL = (process.env.DEMO_EMAIL ?? 'demo@taplino.ch').toLowerCase();
 const DEV_PASSWORD = 'taplino-dev';
-const COMPANY = { name: 'Trattoria Sole', slug: 'taplino-demo' };
+// Card links read /c/trattoria-sole/tisch-1. Earlier runs used taplino-demo.
+const COMPANY = { name: 'Trattoria Sole', slug: 'trattoria-sole' };
+const OLD_COMPANY_SLUGS = ['taplino-demo'];
 const DAYS = 90;
 
 type I18n = { de: string; en: string; fr: string; it: string };
@@ -352,6 +354,8 @@ type DemoCard = {
   location: LocationKey | null;
   area?: string;
   page: string | null;
+  /** Custom link instead of a page. */
+  link?: string;
   weight: number;
 };
 const table = (
@@ -361,7 +365,7 @@ const table = (
   page: string,
   weight: number,
 ): DemoCard => ({
-  slug: `taplino-demo-${location}-t${n}`,
+  slug: location === 'zurich' ? `tisch-${n}` : `${location}-tisch-${n}`,
   name: `Tisch ${n}`,
   type: 'MENU',
   location,
@@ -372,14 +376,15 @@ const table = (
 const CARDS: DemoCard[] = [
   ...Array.from({ length: 12 }, (_, i) => table('zurich', 'Saal', i + 1, 'taplino-demo-menu', 4)),
   ...Array.from({ length: 8 }, (_, i) => table('zurich', 'Terrasse', i + 13, 'taplino-demo-menu', 3)),
-  { slug: 'taplino-demo-bar', name: 'Bar', type: 'MENU', location: 'zurich', area: 'Bar', page: 'taplino-demo-menu', weight: 7 },
-  { slug: 'taplino-demo-kasse', name: 'Kasse Zürich', type: 'REVIEW', location: 'zurich', area: 'Eingang', page: 'taplino-demo-review', weight: 11 },
-  { slug: 'taplino-demo-wlan', name: 'WLAN-Aufsteller', type: 'WIFI', location: 'zurich', area: 'Eingang', page: 'taplino-demo-wifi', weight: 6 },
-  { slug: 'taplino-demo-links-card', name: 'Schaufenster', type: 'LINKHUB', location: 'zurich', area: 'Eingang', page: 'taplino-demo-links', weight: 4 },
+  { slug: 'bar', name: 'Bar', type: 'MENU', location: 'zurich', area: 'Bar', page: 'taplino-demo-menu', weight: 7 },
+  { slug: 'kasse', name: 'Kasse Zürich', type: 'REVIEW', location: 'zurich', area: 'Eingang', page: 'taplino-demo-review', weight: 11 },
+  { slug: 'wlan', name: 'WLAN-Aufsteller', type: 'WIFI', location: 'zurich', area: 'Eingang', page: 'taplino-demo-wifi', weight: 6 },
+  { slug: 'schaufenster', name: 'Schaufenster', type: 'LINKHUB', location: 'zurich', area: 'Eingang', page: 'taplino-demo-links', weight: 4 },
   ...Array.from({ length: 8 }, (_, i) => table('bern', 'Gaststube', i + 1, 'taplino-demo-menu-bern', 2)),
-  { slug: 'taplino-demo-bern-kasse', name: 'Kasse Bern', type: 'REVIEW', location: 'bern', page: 'taplino-demo-review-bern', weight: 6 },
-  { slug: 'taplino-demo-giulia', name: 'Visitenkarte Giulia', type: 'VCARD', location: null, page: 'taplino-demo-kontakt', weight: 3 },
-  { slug: 'taplino-demo-spare', name: 'Ersatzkarte', type: 'REVIEW', location: 'zurich', page: null, weight: 0 },
+  { slug: 'bern-kasse', name: 'Kasse Bern', type: 'REVIEW', location: 'bern', page: 'taplino-demo-review-bern', weight: 6 },
+  { slug: 'giulia', name: 'Visitenkarte Giulia', type: 'VCARD', location: null, page: 'taplino-demo-kontakt', weight: 3 },
+  { slug: 'instagram', name: 'Instagram-Aufsteller', type: 'LINKHUB', location: 'zurich', area: 'Bar', page: null, link: 'https://instagram.com/example', weight: 3 },
+  { slug: 'ersatz', name: 'Ersatzkarte', type: 'REVIEW', location: 'zurich', page: null, weight: 0 },
 ];
 
 // Deterministic PRNG so every reset yields the same-looking analytics.
@@ -474,11 +479,22 @@ async function main() {
       const ownerId = await ensureUser(tx, password);
 
       // ─── Company ─────────────────────────────────────────────────────────
-      const company = await tx.company.upsert({
-        where: { slug: COMPANY.slug },
-        create: { ...COMPANY, brandColor: THEME.brandColor, billingEmail: EMAIL },
-        update: { name: COMPANY.name, brandColor: THEME.brandColor, deletedAt: null },
+      const found = await tx.company.findFirst({
+        where: { slug: { in: [COMPANY.slug, ...OLD_COMPANY_SLUGS] } },
       });
+      const company = found
+        ? await tx.company.update({
+            where: { id: found.id },
+            data: {
+              ...COMPANY,
+              previousSlugs: [...new Set([...found.previousSlugs, ...OLD_COMPANY_SLUGS])],
+              brandColor: THEME.brandColor,
+              deletedAt: null,
+            },
+          })
+        : await tx.company.create({
+            data: { ...COMPANY, brandColor: THEME.brandColor, billingEmail: EMAIL },
+          });
       const companyId = company.id;
 
       await tx.companySettings.upsert({
@@ -564,30 +580,32 @@ async function main() {
       });
 
       // ─── Cards ───────────────────────────────────────────────────────────
-      const cardRows: { id: string; pageId: string; kind: PageKind; weight: number }[] = [];
+      const cardRows: { id: string; pageId: string | null; kind: PageKind | null; weight: number }[] = [];
       for (const c of CARDS) {
         const page = c.page ? pageIds.get(c.page)! : null;
         const data = {
           name: c.name,
           type: c.type,
-          status: page ? ('ACTIVE' as const) : ('UNASSIGNED' as const),
+          status: page || c.link ? ('ACTIVE' as const) : ('UNASSIGNED' as const),
           locationId: c.location ? locationIds.get(c.location)! : null,
           area: c.area ?? null,
           activePageId: page?.id ?? null,
+          linkUrl: c.link ?? null,
+          legacyPath: false,
           deletedAt: null,
         };
-        const existing = await tx.card.findUnique({ where: { slug: c.slug } });
-        if (existing && existing.companyId !== companyId) {
-          throw new Error(`Card slug ${c.slug} belongs to another company.`);
+        const row = await tx.card.upsert({
+          where: { companyId_slug: { companyId, slug: c.slug } },
+          create: { ...data, slug: c.slug, companyId },
+          update: data,
+        });
+        if (page || c.link) {
+          cardRows.push({ id: row.id, pageId: page?.id ?? null, kind: page?.kind ?? null, weight: c.weight });
         }
-        const row = existing
-          ? await tx.card.update({ where: { id: existing.id }, data })
-          : await tx.card.create({ data: { ...data, slug: c.slug, companyId } });
-        if (page) cardRows.push({ id: row.id, pageId: page.id, kind: page.kind, weight: c.weight });
       }
       await tx.card.updateMany({
         where: { companyId, slug: { notIn: CARDS.map((c) => c.slug) }, deletedAt: null },
-        data: { deletedAt: new Date(), status: 'DISABLED', activePageId: null },
+        data: { deletedAt: new Date(), status: 'DISABLED', activePageId: null, linkUrl: null },
       });
 
       // ─── Analytics ───────────────────────────────────────────────────────
@@ -658,7 +676,8 @@ async function main() {
   /* eslint-disable no-console */
   console.log(`Demo business "${COMPANY.name}" ready: ${PAGES.length} pages, ${CARDS.length} cards, ${taps} taps.`);
   console.log(`  login  ${EMAIL}${process.env.DEMO_PASSWORD ? '' : ` / ${password}`}`);
-  console.log(`  public /p/${PAGES[0].slug}`);
+  console.log(`  page   /p/${PAGES[0].slug}`);
+  console.log(`  card   /c/${COMPANY.slug}/tisch-1`);
   /* eslint-enable no-console */
   await prisma.$disconnect();
 }

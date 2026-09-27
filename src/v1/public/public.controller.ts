@@ -10,10 +10,20 @@ import { PublicService } from './public.service.js';
 export class PublicController {
   constructor(private readonly publicService: PublicService) {}
 
-  @ApiOperation({ summary: 'Resolve a card slug to its live tap destination' })
+  @ApiOperation({ summary: 'Resolve a card link /c/<company>/<card> to its tap destination' })
+  @Get('cards/:company/:card')
+  resolveCard(
+    @Param('company') company: string,
+    @Param('card') card: string,
+    @Req() req: Request,
+  ) {
+    return this.publicService.resolveCard(company, card, req);
+  }
+
+  @ApiOperation({ summary: 'Resolve an old-style card link /c/<slug> (cards made before per-company links)' })
   @Get('cards/:slug')
-  resolveCard(@Param('slug') slug: string, @Req() req: Request) {
-    return this.publicService.resolveCard(slug, req);
+  resolveLegacyCard(@Param('slug') slug: string, @Req() req: Request) {
+    return this.publicService.resolveLegacyCard(slug, req);
   }
 
   @ApiOperation({ summary: 'Resolve a shared page slug directly' })

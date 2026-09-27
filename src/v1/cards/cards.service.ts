@@ -4,7 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { customAlphabet } from 'nanoid';
+import { destinationData } from './destination.js';
+import { resolveCardSlug } from './card-slug.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { softDeleteCard } from '../../common/soft-delete.js';
 import { CompanyAccessService } from '../companies/company-access.service.js';
@@ -14,7 +15,6 @@ import type { CreateCardDto } from './dto/create-card.dto.js';
 import type { UpdateCardDto } from './dto/update-card.dto.js';
 
 // Public tap slug generator: 8 chars, lowercase alphanumeric.
-const nanoSlug = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 8);
 
 const ACTIVE_PAGE_SELECT = {
   select: { id: true, name: true, kind: true, slug: true, published: true },
@@ -51,7 +51,10 @@ export class CardsService {
       await this.assertLocationInCompany(dto.locationId, companyId);
     }
 
-    const slug = await this.resolveSlug(dto.slug);
+    const slug = await resolveCardSlug(this.prisma, companyId, {
+      requested: dto.slug,
+      name: dto.name,
+    });
 
     const card = await this.prisma.card.create({
       data: {
@@ -125,38 +128,28 @@ export class CardsService {
     id: string,
     companyId: string,
     userId: string,
-    pageId?: string | null,
+    target: { pageId?: string | null; url?: string | null },
   ) {
     await this.access.requireManager(userId, companyId);
     await this.requireCard(id, companyId);
 
-    if (pageId) {
-      const page = await this.prisma.page.findUnique({
-        where: { id: pageId },
-        select: { id: true, companyId: true, deletedAt: true },
-      });
-      if (!page || page.deletedAt || page.companyId !== companyId) {
-        throw new BadRequestException('Page does not belong to this company');
-      }
-    }
-
-    const linked = Boolean(pageId);
+    const data = await destinationData(this.prisma, companyId, target);
     const card = await this.prisma.card.update({
       where: { id },
-      data: {
-        activePageId: linked ? pageId : null,
-        status: linked ? 'ACTIVE' : 'UNASSIGNED',
-      },
+      data,
       include: { activePage: true, location: LOCATION_SELECT },
     });
 
     log(
       LogKey.CARD_LINKED,
-      linked ? 'Card destination set' : 'Card destination cleared',
+      data.status === 'ACTIVE'
+        ? 'Card destination set'
+        : 'Card destination cleared',
       {
         cardId: card.id,
         companyId,
-        pageId: pageId ?? null,
+        pageId: data.activePageId,
+        link: !!data.linkUrl,
       },
     );
 
@@ -199,32 +192,5 @@ export class CardsService {
     if (!location || location.deletedAt || location.companyId !== companyId) {
       throw new BadRequestException('Location does not belong to this company');
     }
-  }
-
-  /**
-   * Resolve the slug to persist. When a slug is supplied, ensure it is unique;
-   * otherwise generate one, retrying on collision (up to 5 attempts).
-   */
-  private async resolveSlug(requested?: string): Promise<string> {
-    if (requested) {
-      const existing = await this.prisma.card.findUnique({
-        where: { slug: requested },
-        select: { id: true },
-      });
-      if (existing) throw new BadRequestException('Slug is already in use');
-      return requested;
-    }
-
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const candidate = nanoSlug();
-      const clash = await this.prisma.card.findUnique({
-        where: { slug: candidate },
-        select: { id: true },
-      });
-      if (!clash) return candidate;
-    }
-    throw new BadRequestException(
-      'Could not generate a unique slug, please retry',
-    );
   }
 }

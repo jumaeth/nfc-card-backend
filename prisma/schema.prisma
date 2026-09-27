@@ -212,13 +212,17 @@ model Passkey {
 // ─── Company (tenant) ────────────────────────────────────────────────────────
 
 model Company {
-  id           String  @id @default(cuid())
-  name         String
-  slug         String  @unique
-  logo         String?
-  billingEmail String?
+  id            String   @id @default(cuid())
+  name          String
+  // Short name in card links: /c/<slug>/<card slug>.
+  slug          String   @unique
+  // Slugs this company used before. Printed cards carry them, so they keep
+  // resolving here and no other company can take them.
+  previousSlugs String[] @default([])
+  logo          String?
+  billingEmail  String?
   // Default brand colours applied to new pages/cards (Taplino accent by default).
-  brandColor   String  @default("#2f6df0")
+  brandColor    String   @default("#2f6df0")
 
   // The Taplino sales rep who owns this customer. Scopes the admin console for
   // SALES staff; null = unassigned (only SUPPORT/ADMIN see it).
@@ -447,8 +451,12 @@ model Card {
   // Optional zone inside the location ("Terrasse", "Saal", "Bar"), so a
   // restaurant with many tables can group its cards.
   area       String?
-  // Public identifier printed/encoded on the card. Used in the tap URL /c/[slug].
-  slug       String     @unique
+  // Short name printed/encoded on the card, unique within the company. Tap URL
+  // /c/<company slug>/<slug>.
+  slug       String
+  // Cards created before per-company links answer the old /c/<slug> URL too
+  // (their slugs were globally unique then). New cards never do.
+  legacyPath Boolean    @default(false)
   // Optional hardware UID of the NFC chip (for provisioning/verification).
   uid        String?    @unique
   status     CardStatus @default(UNASSIGNED)
@@ -459,6 +467,10 @@ model Card {
   // destination anytime").
   activePageId String?
   activePage   Page?   @relation(fields: [activePageId], references: [id], onDelete: SetNull)
+  // Or a custom link instead of a page (web address, tel:, mailto:, sms:). A tap
+  // is recorded, then the visitor is sent straight there. Never set together
+  // with activePageId.
+  linkUrl      String?
 
   company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   location  Location?  @relation(fields: [locationId], references: [id], onDelete: SetNull)
@@ -473,6 +485,9 @@ model Card {
   // Soft delete. The slug stays reserved so a printed card is never reused.
   deletedAt DateTime?
 
+  @@unique([companyId, slug])
+  // Old-style /c/<slug> links look cards up by slug alone.
+  @@index([slug])
   @@index([companyId])
   @@index([locationId])
   @@index([activePageId])

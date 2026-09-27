@@ -77,7 +77,7 @@ export class CardsController {
     @CurrentUser() user: User,
     @Body() dto: SetDestinationDto,
   ) {
-    return this.cards.setDestination(id, companyId, user.id, dto.pageId);
+    return this.cards.setDestination(id, companyId, user.id, dto);
   }
 
   @ApiOperation({ summary: 'Delete a card' })

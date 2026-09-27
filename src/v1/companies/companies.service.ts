@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'crypto';
+import { assertCompanySlugFree, renameSlugData } from './company-slug.js';
 import { PrismaService, type TxClient } from '../../prisma/prisma.service.js';
 import { bootstrapCompany } from './company-bootstrap.js';
 import { CompanyAccessService } from './company-access.service.js';
@@ -52,11 +53,7 @@ export class CompaniesService {
   // ─── Companies ──────────────────────────────────────────────────────────────
 
   async create(userId: string, dto: CreateCompanyDto) {
-    const existing = await this.prisma.company.findUnique({
-      where: { slug: dto.slug },
-    });
-    if (existing)
-      throw new ConflictException('A company with this slug already exists');
+    await assertCompanySlugFree(this.prisma.$prisma, dto.slug);
 
     const starter = await this.prisma.subscriptionPlan.findUnique({
       where: { tier: 'STARTER' },
@@ -127,19 +124,18 @@ export class CompaniesService {
 
   async update(companyId: string, userId: string, dto: UpdateCompanyDto) {
     await this.access.requireManager(userId, companyId);
-    if (dto.slug) {
-      const existing = await this.prisma.company.findUnique({
-        where: { slug: dto.slug },
-      });
-      if (existing && existing.id !== companyId) {
-        throw new ConflictException('This URL identifier is already taken');
-      }
+    const current = await this.prisma.company.findUniqueOrThrow({
+      where: { id: companyId },
+      select: { slug: true, previousSlugs: true },
+    });
+    if (dto.slug && dto.slug !== current.slug) {
+      await assertCompanySlugFree(this.prisma.$prisma, dto.slug, companyId);
     }
     return this.prisma.company.update({
       where: { id: companyId },
       data: {
         ...(dto.name !== undefined && { name: dto.name }),
-        ...(dto.slug !== undefined && { slug: dto.slug }),
+        ...renameSlugData(current, dto.slug),
         ...(dto.logo !== undefined && { logo: dto.logo }),
         ...(dto.brandColor !== undefined && { brandColor: dto.brandColor }),
       },

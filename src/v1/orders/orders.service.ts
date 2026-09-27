@@ -653,13 +653,13 @@ export class OrdersService {
         }
       }
 
-      // Assign unique slugs, regenerating the (rare) clashes with existing cards.
+      // Assign slugs unique in the company, regenerating the (rare) clashes.
       const slugs = new Set<string>();
       while (slugs.size < rows.length) slugs.add(cardSlug());
       let pending = [...slugs];
       for (let attempt = 0; attempt < 5; attempt++) {
         const taken = await tx.card.findMany({
-          where: { slug: { in: pending } },
+          where: { companyId: order.companyId, slug: { in: pending } },
           select: { slug: true },
         });
         if (taken.length === 0) break;
@@ -734,6 +734,7 @@ export class OrdersService {
             select: {
               id: true,
               name: true,
+              slug: true,
               salesRep: { select: { id: true, name: true } },
             },
           },
@@ -758,6 +759,8 @@ export class OrdersService {
         cancelledAt: order.cancelledAt,
         companyId: order.companyId,
         companyNameInApp: order.company?.name ?? null,
+        // Card links are /c/<company slug>/<card slug>.
+        companySlug: order.company?.slug ?? null,
         salesRep: order.company?.salesRep ?? null,
         handledBy: order.handledBy,
         handledAt: order.handledAt,

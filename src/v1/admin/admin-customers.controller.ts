@@ -191,7 +191,7 @@ export class AdminCustomersController {
     @Param('cardId') cardId: string,
     @Body() dto: SetDestinationDto,
   ) {
-    return this.customers.setCardDestination(user, companyId, cardId, dto.pageId);
+    return this.customers.setCardDestination(user, companyId, cardId, dto);
   }
 
   @ApiOperation({ summary: 'Delete a card' })
@@ -351,6 +351,27 @@ export class AdminCustomersController {
     @Param('id') id: string,
   ) {
     return this.customers.deleteDesignTemplate(user, companyId, id);
+  }
+
+  @ApiOperation({ summary: 'Guests who asked for the Wi-Fi on a customer page' })
+  @Get(':companyId/pages/:pageId/wifi-guests')
+  listWifiGuests(
+    @CurrentUser() user: User,
+    @Param('companyId') companyId: string,
+    @Param('pageId') pageId: string,
+  ) {
+    return this.customers.listWifiGuests(user, companyId, pageId);
+  }
+
+  @ApiOperation({ summary: 'Delete a Wi-Fi guest and their consent' })
+  @Delete(':companyId/pages/:pageId/wifi-guests/:guestId')
+  deleteWifiGuest(
+    @CurrentUser() user: User,
+    @Param('companyId') companyId: string,
+    @Param('pageId') pageId: string,
+    @Param('guestId') guestId: string,
+  ) {
+    return this.customers.deleteWifiGuest(user, companyId, pageId, guestId);
   }
 
   @ApiOperation({ summary: 'Delete a customer page (soft delete)' })

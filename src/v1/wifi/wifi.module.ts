@@ -13,5 +13,7 @@ import {
   imports: [CompanyAccessModule],
   providers: [WifiAccessService, WifiGuestsService],
   controllers: [PublicWifiController, WifiGuestsController],
+  // The admin console reads and erases guests through the same service.
+  exports: [WifiGuestsService],
 })
 export class WifiModule {}

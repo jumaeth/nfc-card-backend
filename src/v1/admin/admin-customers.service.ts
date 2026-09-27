@@ -11,6 +11,10 @@ import { CompaniesService } from '../companies/companies.service.js';
 import { TranslateService } from '../translate/translate.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
 import { DesignTemplatesService } from '../design-templates/design-templates.service.js';
+import { WifiGuestsService } from '../wifi/wifi-guests.service.js';
+import { destinationData } from '../cards/destination.js';
+import { resolveCardSlug } from '../cards/card-slug.js';
+import { assertCompanySlugFree, renameSlugData } from '../companies/company-slug.js';
 import type {
   CreateDesignTemplateDto,
   UpdateDesignTemplateDto,
@@ -90,6 +94,7 @@ export class AdminCustomersService {
     private readonly translator: TranslateService,
     private readonly uploads: UploadsService,
     private readonly designTemplates: DesignTemplatesService,
+    private readonly wifiGuests: WifiGuestsService,
   ) {}
 
   // ─── Scope ──────────────────────────────────────────────────────────────────
@@ -223,9 +228,7 @@ export class AdminCustomersService {
     const salesRepId = isAdmin ? (dto.salesRepId ?? null) : staff.id;
 
     const company = await this.prisma.$asAdmin(async (tx) => {
-      if (await tx.company.findUnique({ where: { slug: dto.slug } })) {
-        throw new ConflictException('A company with this slug already exists');
-      }
+      await assertCompanySlugFree(tx, dto.slug);
       if (salesRepId && salesRepId !== staff.id) await this.requireSalesRep(tx, salesRepId);
 
       const starter = await tx.subscriptionPlan.findUnique({ where: { tier: 'STARTER' } });
@@ -290,18 +293,15 @@ export class AdminCustomersService {
 
   async update(staff: Staff, companyId: string, dto: UpdateCustomerDto) {
     const updated = await this.prisma.$asAdmin(async (tx) => {
-      await this.requireManageable(tx, staff, companyId);
-      if (dto.slug) {
-        const clash = await tx.company.findUnique({ where: { slug: dto.slug } });
-        if (clash && clash.id !== companyId) {
-          throw new ConflictException('This URL identifier is already taken');
-        }
+      const current = await this.requireManageable(tx, staff, companyId);
+      if (dto.slug && dto.slug !== current.slug) {
+        await assertCompanySlugFree(tx, dto.slug, companyId);
       }
       return tx.company.update({
         where: { id: companyId },
         data: {
           ...(dto.name !== undefined && { name: dto.name }),
-          ...(dto.slug !== undefined && { slug: dto.slug }),
+          ...renameSlugData(current, dto.slug),
           ...(dto.billingEmail !== undefined && { billingEmail: dto.billingEmail }),
           ...(dto.brandColor !== undefined && { brandColor: dto.brandColor }),
         },
@@ -488,7 +488,8 @@ export class AdminCustomersService {
           name: dto.name,
           type: dto.type,
           locationId: dto.locationId ?? null,
-          slug: await this.resolveCardSlug(tx, dto.slug),
+          slug: await resolveCardSlug(tx, companyId, { requested: dto.slug, name: dto.name }),
+          area: dto.area?.trim() || null,
           uid: dto.uid ?? null,
           status: 'UNASSIGNED',
           design: (dto.design ?? {}) as Prisma.InputJsonValue,
@@ -525,24 +526,20 @@ export class AdminCustomersService {
     staff: Staff,
     companyId: string,
     cardId: string,
-    pageId: string | null | undefined,
+    target: { pageId?: string | null; url?: string | null },
   ) {
     const card = await this.prisma.$asAdmin(async (tx) => {
       await this.requireManageable(tx, staff, companyId);
       await this.requireCard(tx, companyId, cardId);
-      if (pageId) {
-        const page = await tx.page.findUnique({ where: { id: pageId } });
-        if (!page || page.deletedAt || page.companyId !== companyId) {
-          throw new BadRequestException('Page does not belong to this company');
-        }
-      }
-      return tx.card.update({
-        where: { id: cardId },
-        data: { activePageId: pageId || null, status: pageId ? 'ACTIVE' : 'UNASSIGNED' },
-        include: CARD_INCLUDE,
-      });
+      const data = await destinationData(tx, companyId, target);
+      return tx.card.update({ where: { id: cardId }, data, include: CARD_INCLUDE });
     });
-    this.audit(staff, 'card.set_destination', { companyId, cardId, pageId: pageId ?? null });
+    this.audit(staff, 'card.set_destination', {
+      companyId,
+      cardId,
+      pageId: card.activePageId,
+      link: !!card.linkUrl,
+    });
     return card;
   }
 
@@ -775,6 +772,32 @@ export class AdminCustomersService {
     return { id: pageId, deleted: true };
   }
 
+  // ─── Wi-Fi guests ───────────────────────────────────────────────────────────
+
+  listWifiGuests(staff: Staff, companyId: string, pageId: string) {
+    return this.prisma.$asAdmin(async (tx) => {
+      await this.requireViewable(tx, staff, companyId);
+      await this.requirePage(tx, companyId, pageId);
+      return this.wifiGuests.listIn(tx, companyId, pageId);
+    });
+  }
+
+  /** Erasure on the customer's behalf (a guest asked Taplino directly). */
+  async deleteWifiGuest(
+    staff: Staff,
+    companyId: string,
+    pageId: string,
+    guestId: string,
+  ) {
+    const result = await this.prisma.$asAdmin(async (tx) => {
+      await this.requireManageable(tx, staff, companyId);
+      await this.requirePage(tx, companyId, pageId);
+      return this.wifiGuests.removeIn(tx, companyId, pageId, guestId);
+    });
+    this.audit(staff, 'wifi_guest.delete', { companyId, pageId, guestId });
+    return result;
+  }
+
   // ─── Deleted pages (SUPER_ADMIN, enforced on the routes) ─────────────────────
 
   listDeletedPages(staff: Staff, companyId: string) {
@@ -864,20 +887,6 @@ export class AdminCustomersService {
     if (!location || location.deletedAt || location.companyId !== companyId) {
       throw new BadRequestException('Location does not belong to this company');
     }
-  }
-
-  private async resolveCardSlug(tx: TxClient, requested?: string): Promise<string> {
-    if (requested) {
-      if (await tx.card.findUnique({ where: { slug: requested } })) {
-        throw new ConflictException('Slug is already in use');
-      }
-      return requested;
-    }
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const candidate = nanoSlug();
-      if (!(await tx.card.findUnique({ where: { slug: candidate } }))) return candidate;
-    }
-    throw new BadRequestException('Could not generate a unique slug, please retry');
   }
 
   private async resolvePageSlug(tx: TxClient, requested?: string): Promise<string> {
