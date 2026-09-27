@@ -6,10 +6,14 @@ import {
   Param,
   Patch,
   Post,
+  HttpCode,
   Put,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
+import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AdminCustomersService } from './admin-customers.service.js';
 import { BetterAuthGuard } from '../auth/auth.guard.js';
@@ -29,6 +33,11 @@ import { UpdateCardDto } from '../cards/dto/update-card.dto.js';
 import { SetDestinationDto } from '../cards/dto/set-destination.dto.js';
 import { CreatePageDto } from '../pages/dto/create-page.dto.js';
 import { UpdatePageDto } from '../pages/dto/update-page.dto.js';
+import { TranslateTextDto } from '../translate/dto/translate.dto.js';
+import {
+  CreateDesignTemplateDto,
+  UpdateDesignTemplateDto,
+} from '../design-templates/dto/design-template.dto.js';
 import { CreateLocationDto } from '../locations/dto/create-location.dto.js';
 import { UpdateLocationDto } from '../locations/dto/update-location.dto.js';
 import type { User } from '../../../generated/prisma/client.js';
@@ -279,6 +288,69 @@ export class AdminCustomersController {
     @Body() dto: UpdatePageDto,
   ) {
     return this.customers.updatePage(user, companyId, pageId, dto);
+  }
+
+  @ApiOperation({ summary: 'Translate a field of a customer page (no monthly limit)' })
+  // Each call costs money; same burst limit as the app's translate route.
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  @HttpCode(200)
+  @Post(':companyId/pages/:pageId/translate')
+  translatePage(
+    @CurrentUser() user: User,
+    @Param('companyId') companyId: string,
+    @Param('pageId') pageId: string,
+    @Body() dto: TranslateTextDto,
+  ) {
+    return this.customers.translatePage(user, companyId, pageId, dto);
+  }
+
+  @ApiOperation({ summary: 'Upload a design image for a customer (raw bytes, max 5 MB)' })
+  @Throttle({ default: { ttl: 60_000, limit: 20 } })
+  @Post(':companyId/uploads')
+  uploadImage(
+    @CurrentUser() user: User,
+    @Param('companyId') companyId: string,
+    @Req() req: Request,
+  ) {
+    return this.customers.uploadImage(user, companyId, req);
+  }
+
+  @ApiOperation({ summary: 'List a customer saved page designs' })
+  @Get(':companyId/design-templates')
+  listDesignTemplates(@CurrentUser() user: User, @Param('companyId') companyId: string) {
+    return this.customers.listDesignTemplates(user, companyId);
+  }
+
+  @ApiOperation({ summary: 'Save a page design for a customer' })
+  @Post(':companyId/design-templates')
+  createDesignTemplate(
+    @CurrentUser() user: User,
+    @Param('companyId') companyId: string,
+    @Body() dto: CreateDesignTemplateDto,
+  ) {
+    return this.customers.createDesignTemplate(user, companyId, dto);
+  }
+
+  @ApiOperation({ summary: 'Rename or overwrite a customer saved design' })
+  @Patch(':companyId/design-templates/:id')
+  updateDesignTemplate(
+    @CurrentUser() user: User,
+    @Param('companyId') companyId: string,
+    @Param('id') id: string,
+    @Body() dto: UpdateDesignTemplateDto,
+  ) {
+    return this.customers.updateDesignTemplate(user, companyId, id, dto);
+  }
+
+  @ApiOperation({ summary: 'Delete a customer saved design' })
+  @HttpCode(204)
+  @Delete(':companyId/design-templates/:id')
+  deleteDesignTemplate(
+    @CurrentUser() user: User,
+    @Param('companyId') companyId: string,
+    @Param('id') id: string,
+  ) {
+    return this.customers.deleteDesignTemplate(user, companyId, id);
   }
 
   @ApiOperation({ summary: 'Delete a customer page (soft delete)' })

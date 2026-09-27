@@ -5,3 +5,6 @@
 .env
 .DS_Store
 /coverage
+
+# Local upload storage (dev, when no bucket is configured)
+/.uploads

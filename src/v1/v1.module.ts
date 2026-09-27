@@ -12,6 +12,9 @@ import { BillingModule } from './billing/billing.module.js';
 import { AdminModule } from './admin/admin.module.js';
 import { ProductsModule } from './products/products.module.js';
 import { OrdersModule } from './orders/orders.module.js';
+import { TranslateModule } from './translate/translate.module.js';
+import { UploadsModule } from './uploads/uploads.module.js';
+import { DesignTemplatesModule } from './design-templates/design-templates.module.js';
 import { HealthController } from './health/health.controller.js';
 
 @Module({
@@ -29,6 +32,9 @@ import { HealthController } from './health/health.controller.js';
     AdminModule,
     ProductsModule,
     OrdersModule,
+    TranslateModule,
+    UploadsModule,
+    DesignTemplatesModule,
   ],
   controllers: [HealthController],
 })

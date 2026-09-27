@@ -8,6 +8,14 @@ import {
 import { customAlphabet } from 'nanoid';
 import { PrismaService, type TxClient } from '../../prisma/prisma.service.js';
 import { CompaniesService } from '../companies/companies.service.js';
+import { TranslateService } from '../translate/translate.service.js';
+import { UploadsService } from '../uploads/uploads.service.js';
+import { DesignTemplatesService } from '../design-templates/design-templates.service.js';
+import type {
+  CreateDesignTemplateDto,
+  UpdateDesignTemplateDto,
+} from '../design-templates/dto/design-template.dto.js';
+import type { Request } from 'express';
 import { bootstrapCompany } from '../companies/company-bootstrap.js';
 import {
   canManageCustomer,
@@ -29,6 +37,7 @@ import type { CreateCardDto } from '../cards/dto/create-card.dto.js';
 import type { UpdateCardDto } from '../cards/dto/update-card.dto.js';
 import type { CreatePageDto } from '../pages/dto/create-page.dto.js';
 import type { UpdatePageDto } from '../pages/dto/update-page.dto.js';
+import type { TranslateTextDto } from '../translate/dto/translate.dto.js';
 import type { CreateLocationDto } from '../locations/dto/create-location.dto.js';
 import type { UpdateLocationDto } from '../locations/dto/update-location.dto.js';
 
@@ -78,6 +87,9 @@ export class AdminCustomersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly companies: CompaniesService,
+    private readonly translator: TranslateService,
+    private readonly uploads: UploadsService,
+    private readonly designTemplates: DesignTemplatesService,
   ) {}
 
   // ─── Scope ──────────────────────────────────────────────────────────────────
@@ -682,6 +694,74 @@ export class AdminCustomersService {
     });
     this.audit(staff, 'page.update', { companyId, pageId, fields: Object.keys(dto) });
     return page;
+  }
+
+  /**
+   * Translate one field of a customer page. Same access as `updatePage` (ADMIN+
+   * any customer, SALES its own, SUPPORT refused). Staff are not bound by the
+   * customer's monthly translation limit, but the usage is still recorded.
+   */
+  async translatePage(staff: Staff, companyId: string, pageId: string, dto: TranslateTextDto) {
+    await this.prisma.$asAdmin(async (tx) => {
+      await this.requireManageable(tx, staff, companyId);
+      await this.requirePage(tx, companyId, pageId);
+    });
+    const translations = await this.translator.translateText(dto, {
+      companyId,
+      pageId,
+      staff: true,
+    });
+    await this.prisma.$asAdmin((tx) => this.translator.recordUsage(tx, companyId, pageId));
+    this.audit(staff, 'page.translate', { companyId, pageId, from: dto.from, to: dto.to });
+    return { translations };
+  }
+
+  /** Upload a design image (logo, cover, menu photo) for a customer. Same access as page edits. */
+  async uploadImage(staff: Staff, companyId: string, req: Request) {
+    await this.prisma.$asAdmin((tx) => this.requireManageable(tx, staff, companyId));
+    const result = await this.uploads.uploadImage(companyId, req, { staffId: staff.id });
+    this.audit(staff, 'upload.image', { companyId, url: result.url });
+    return result;
+  }
+
+  // ─── Design templates ───────────────────────────────────────────────────────
+
+  listDesignTemplates(staff: Staff, companyId: string) {
+    return this.prisma.$asAdmin(async (tx) => {
+      await this.requireViewable(tx, staff, companyId);
+      return this.designTemplates.listIn(tx, companyId);
+    });
+  }
+
+  async createDesignTemplate(staff: Staff, companyId: string, dto: CreateDesignTemplateDto) {
+    const template = await this.prisma.$asAdmin(async (tx) => {
+      await this.requireManageable(tx, staff, companyId);
+      return this.designTemplates.createIn(tx, companyId, dto);
+    });
+    this.audit(staff, 'design_template.create', { companyId, templateId: template.id });
+    return template;
+  }
+
+  async updateDesignTemplate(
+    staff: Staff,
+    companyId: string,
+    id: string,
+    dto: UpdateDesignTemplateDto,
+  ) {
+    const template = await this.prisma.$asAdmin(async (tx) => {
+      await this.requireManageable(tx, staff, companyId);
+      return this.designTemplates.updateIn(tx, companyId, id, dto);
+    });
+    this.audit(staff, 'design_template.update', { companyId, templateId: id });
+    return template;
+  }
+
+  async deleteDesignTemplate(staff: Staff, companyId: string, id: string) {
+    await this.prisma.$asAdmin(async (tx) => {
+      await this.requireManageable(tx, staff, companyId);
+      await this.designTemplates.removeIn(tx, companyId, id);
+    });
+    this.audit(staff, 'design_template.delete', { companyId, templateId: id });
   }
 
   /** Soft delete: the page is unpublished and hidden, and its cards are detached. */

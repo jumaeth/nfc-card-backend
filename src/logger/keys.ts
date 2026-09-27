@@ -51,6 +51,17 @@ export const LogKey = {
   BILLING_WEBHOOK_ERROR: 'billing.webhook.error',
   BILLING_SUBSCRIPTION_UPDATED: 'billing.subscription.updated',
 
+  // Translation (Claude)
+  TRANSLATE_OK: 'translate.ok',
+  TRANSLATE_ERROR: 'translate.error',
+  TRANSLATE_LIMIT_REACHED: 'translate.limit_reached',
+  TRANSLATE_NOT_CONFIGURED: 'translate.not_configured',
+
+  // Uploads / file storage
+  STORAGE_READY: 'storage.ready',
+  STORAGE_NOT_CONFIGURED: 'storage.not_configured',
+  UPLOAD_STORED: 'upload.stored',
+
   // App lifecycle
   APP_BOOTSTRAP: 'app.bootstrap',
   APP_ERROR: 'app.error',

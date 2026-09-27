@@ -84,6 +84,12 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get stripeCustomer() {
     return this.client.stripeCustomer;
   }
+  get translationUsage() {
+    return this.client.translationUsage;
+  }
+  get designTemplate() {
+    return this.client.designTemplate;
+  }
 
   // ─── Global catalogue (not RLS-secured) ─────────────────────────────────────
   get subscriptionPlan() {

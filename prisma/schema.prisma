@@ -225,16 +225,18 @@ model Company {
   salesRepId String?
   salesRep   User?   @relation("CompanySalesRep", fields: [salesRepId], references: [id], onDelete: SetNull)
 
-  members        CompanyMember[]
-  locations      Location[]
-  cards          Card[]
-  orders         Order[]
-  pages          Page[]
-  tapEvents      TapEvent[]
-  invitations    Invitation[]
-  subscription   Subscription?
-  stripeCustomer StripeCustomer?
-  settings       CompanySettings?
+  members          CompanyMember[]
+  locations        Location[]
+  cards            Card[]
+  orders           Order[]
+  pages            Page[]
+  translationUsage TranslationUsage[]
+  designTemplates  DesignTemplate[]
+  tapEvents        TapEvent[]
+  invitations      Invitation[]
+  subscription     Subscription?
+  stripeCustomer   StripeCustomer?
+  settings         CompanySettings?
 
   // Soft-delete marker. A company is never hard-deleted; archived when its last
   // member archives their account. null = active.
@@ -339,10 +341,11 @@ model Page {
   // Kind-specific builder content (menu sections, links, wifi creds, ...).
   content    Json     @default("{}")
 
-  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  location  Location?  @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  cards     Card[]
-  tapEvents TapEvent[]
+  company          Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  location         Location?          @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  cards            Card[]
+  tapEvents        TapEvent[]
+  translationUsage TranslationUsage[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -353,6 +356,46 @@ model Page {
   @@index([locationId])
   @@index([kind])
   @@index([companyId, deletedAt])
+}
+
+// A saved page design (logo, colours, fonts, header) a company reuses across
+// its pages. Applying a template copies its theme into the page; later edits to
+// the template do not change pages that already use it.
+model DesignTemplate {
+  id        String @id @default(cuid())
+  companyId String
+  name      String
+  // Same shape as Page.theme.
+  theme     Json   @default("{}")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId])
+}
+
+// Auto-translate usage (Claude Haiku), one row per page per calendar month.
+// A company may translate a limited number of distinct pages per month; the
+// request count caps spend within a page. Staff are exempt from the limits.
+model TranslationUsage {
+  id        String @id @default(cuid())
+  companyId String
+  pageId    String
+  // UTC calendar month, e.g. "2026-09".
+  month     String
+  requests  Int    @default(0)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  page    Page    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, pageId, month])
+  @@index([companyId, month])
+  @@index([pageId])
 }
 
 // ─── Cards (physical NFC products) ───────────────────────────────────────────
