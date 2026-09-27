@@ -41,7 +41,8 @@ async function bootstrap() {
   // 1000-item batch-punch endpoint) but bounded so a client can't stream an
   // oversized body. rawBody capture for the Stripe webhook is preserved because
   // rawBody:true was passed to NestFactory.create above.
-  app.useBodyParser('json', { limit: '1mb' });
+  // Orders carry up to five designs, each with its logo as a data URL.
+  app.useBodyParser('json', { limit: '4mb' });
   app.useBodyParser('urlencoded', { limit: '1mb', extended: true });
 
   // First middleware: opens the per-request tenant-context store (RLS user id)

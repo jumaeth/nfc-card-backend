@@ -184,8 +184,13 @@ export class OrdersService {
       }
     }
 
-    // Price every line from the live catalogue, never from the client.
+    // Price every line from the live catalogue, never from the client. The
+    // volume discount is per product, on the order's total for that product.
     const catalogue = await this.products.listAll();
+    const productQty = new Map<string, number>();
+    for (const item of input.items) {
+      productQty.set(item.productKey, (productQty.get(item.productKey) ?? 0) + item.quantity);
+    }
     const lines = input.items.map((item) => {
       const product = catalogue.find((p) => p.key === item.productKey);
       if (!product)
@@ -198,7 +203,11 @@ export class OrdersService {
       return {
         item,
         product,
-        price: priceLine(product.priceCents, item.quantity),
+        price: priceLine(
+          product.priceCents,
+          item.quantity,
+          productQty.get(item.productKey),
+        ),
       };
     });
 

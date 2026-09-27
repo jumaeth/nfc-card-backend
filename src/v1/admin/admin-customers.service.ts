@@ -15,7 +15,7 @@ import {
   seesAllCustomers,
 } from '../../common/permissions.js';
 import { log, LogKey } from '../../logger/index.js';
-import { softDeleteCard, softDeletePage } from '../../common/soft-delete.js';
+import { softDeleteCard, softDeleteLocation, softDeletePage } from '../../common/soft-delete.js';
 import { Prisma } from '../../../generated/prisma/client.js';
 import type { User } from '../../../generated/prisma/client.js';
 import type {
@@ -29,6 +29,8 @@ import type { CreateCardDto } from '../cards/dto/create-card.dto.js';
 import type { UpdateCardDto } from '../cards/dto/update-card.dto.js';
 import type { CreatePageDto } from '../pages/dto/create-page.dto.js';
 import type { UpdatePageDto } from '../pages/dto/update-page.dto.js';
+import type { CreateLocationDto } from '../locations/dto/create-location.dto.js';
+import type { UpdateLocationDto } from '../locations/dto/update-location.dto.js';
 
 export type Staff = Pick<User, 'id' | 'name' | 'platformRole'>;
 
@@ -48,6 +50,19 @@ const CARD_INCLUDE = {
   activePage: { select: { id: true, name: true, kind: true, slug: true, published: true } },
   location: { select: { id: true, name: true } },
 } as const;
+
+/** The optional location fields a create or update DTO actually sent. */
+function locationData(dto: CreateLocationDto | UpdateLocationDto) {
+  return {
+    ...(dto.address !== undefined && { address: dto.address }),
+    ...(dto.city !== undefined && { city: dto.city }),
+    ...(dto.postalCode !== undefined && { postalCode: dto.postalCode }),
+    ...(dto.country !== undefined && { country: dto.country }),
+    ...(dto.timezone !== undefined && { timezone: dto.timezone }),
+    ...(dto.googlePlaceId !== undefined && { googlePlaceId: dto.googlePlaceId }),
+    ...(dto.googleReviewUrl !== undefined && { googleReviewUrl: dto.googleReviewUrl }),
+  };
+}
 
 /**
  * The admin console's view of customers (companies) across tenants.
@@ -529,6 +544,68 @@ export class AdminCustomersService {
     return { id: cardId, deleted: true };
   }
 
+  // ─── Locations ──────────────────────────────────────────────────────────────
+
+  /**
+   * Staff set customers up, so like createPage this deliberately skips the
+   * plan's location limit. The default rules match LocationsService: the first
+   * location is always the default, promoting one demotes the others, and the
+   * current default can only change by promoting another location.
+   */
+  async createLocation(staff: Staff, companyId: string, dto: CreateLocationDto) {
+    const location = await this.prisma.$asAdmin(async (tx) => {
+      await this.requireManageable(tx, staff, companyId);
+      const existing = await tx.location.count({ where: { companyId, deletedAt: null } });
+      const isDefault = existing === 0 || dto.isDefault === true;
+      if (isDefault && existing > 0) {
+        await tx.location.updateMany({ where: { companyId }, data: { isDefault: false } });
+      }
+      return tx.location.create({
+        data: { ...locationData(dto), companyId, name: dto.name, isDefault },
+      });
+    });
+    this.audit(staff, 'location.create', { companyId, locationId: location.id });
+    return location;
+  }
+
+  async updateLocation(
+    staff: Staff,
+    companyId: string,
+    locationId: string,
+    dto: UpdateLocationDto,
+  ) {
+    const location = await this.prisma.$asAdmin(async (tx) => {
+      await this.requireManageable(tx, staff, companyId);
+      await this.requireLocation(tx, companyId, locationId);
+      if (dto.isDefault === true) {
+        await tx.location.updateMany({ where: { companyId }, data: { isDefault: false } });
+      }
+      return tx.location.update({
+        where: { id: locationId },
+        data: {
+          ...locationData(dto),
+          ...(dto.name !== undefined && { name: dto.name }),
+          ...(dto.isDefault === true && { isDefault: true }),
+        },
+      });
+    });
+    this.audit(staff, 'location.update', { companyId, locationId, fields: Object.keys(dto) });
+    return location;
+  }
+
+  async deleteLocation(staff: Staff, companyId: string, locationId: string) {
+    await this.prisma.$asAdmin(async (tx) => {
+      await this.requireManageable(tx, staff, companyId);
+      const location = await this.requireLocation(tx, companyId, locationId);
+      if (location.isDefault) {
+        throw new BadRequestException('Set another location as default first.');
+      }
+      await softDeleteLocation(tx, locationId);
+    });
+    this.audit(staff, 'location.delete', { companyId, locationId });
+    return { id: locationId, deleted: true };
+  }
+
   // ─── Pages ──────────────────────────────────────────────────────────────────
 
   listPages(staff: Staff, companyId: string) {
@@ -692,6 +769,14 @@ export class AdminCustomersService {
       throw new NotFoundException('Card not found');
     }
     return card;
+  }
+
+  private async requireLocation(tx: TxClient, companyId: string, locationId: string) {
+    const location = await tx.location.findUnique({ where: { id: locationId } });
+    if (!location || location.deletedAt || location.companyId !== companyId) {
+      throw new NotFoundException('Location not found');
+    }
+    return location;
   }
 
   private async assertLocationInCompany(tx: TxClient, locationId: string, companyId: string) {

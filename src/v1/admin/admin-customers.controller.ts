@@ -29,6 +29,8 @@ import { UpdateCardDto } from '../cards/dto/update-card.dto.js';
 import { SetDestinationDto } from '../cards/dto/set-destination.dto.js';
 import { CreatePageDto } from '../pages/dto/create-page.dto.js';
 import { UpdatePageDto } from '../pages/dto/update-page.dto.js';
+import { CreateLocationDto } from '../locations/dto/create-location.dto.js';
+import { UpdateLocationDto } from '../locations/dto/update-location.dto.js';
 import type { User } from '../../../generated/prisma/client.js';
 
 // All staff reach these routes; the service narrows SALES to its own customers
@@ -191,6 +193,37 @@ export class AdminCustomersController {
     @Param('cardId') cardId: string,
   ) {
     return this.customers.deleteCard(user, companyId, cardId);
+  }
+
+  @ApiOperation({ summary: 'Create a location for a customer (no plan limit)' })
+  @Post(':companyId/locations')
+  createLocation(
+    @CurrentUser() user: User,
+    @Param('companyId') companyId: string,
+    @Body() dto: CreateLocationDto,
+  ) {
+    return this.customers.createLocation(user, companyId, dto);
+  }
+
+  @ApiOperation({ summary: 'Update a location, or make it the default' })
+  @Patch(':companyId/locations/:locationId')
+  updateLocation(
+    @CurrentUser() user: User,
+    @Param('companyId') companyId: string,
+    @Param('locationId') locationId: string,
+    @Body() dto: UpdateLocationDto,
+  ) {
+    return this.customers.updateLocation(user, companyId, locationId, dto);
+  }
+
+  @ApiOperation({ summary: 'Delete a location (not the default)' })
+  @Delete(':companyId/locations/:locationId')
+  deleteLocation(
+    @CurrentUser() user: User,
+    @Param('companyId') companyId: string,
+    @Param('locationId') locationId: string,
+  ) {
+    return this.customers.deleteLocation(user, companyId, locationId);
   }
 
   @ApiOperation({ summary: 'List a customer pages' })

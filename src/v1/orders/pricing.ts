@@ -23,11 +23,17 @@ export interface PricedLine {
   lineTotalCents: number;
 }
 
+/**
+ * Prices one order line. The volume discount follows `tierQuantity`, the
+ * order's total for this product, so splitting cards over several designs
+ * never costs more than one design would.
+ */
 export function priceLine(
   basePriceCents: number,
   quantity: number,
+  tierQuantity: number = quantity,
 ): PricedLine {
-  const off = VOLUME_TIERS.find((t) => quantity >= t.min)?.off ?? 0;
+  const off = VOLUME_TIERS.find((t) => tierQuantity >= t.min)?.off ?? 0;
   const unitPriceCents = Math.round(basePriceCents * (1 - off));
   return {
     quantity,
