@@ -67,8 +67,8 @@ export class AdminController {
     return this.users.detail(userId);
   }
 
-  @ApiOperation({ summary: 'Change a user platform role (ADMIN+)' })
-  @PlatformRoles('ADMIN')
+  @ApiOperation({ summary: 'Change a user platform role (SUPER_ADMIN)' })
+  @PlatformRoles('SUPER_ADMIN')
   @Patch('users/:userId/role')
   setRole(
     @CurrentUser() user: User,

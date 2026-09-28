@@ -52,6 +52,8 @@ export const LogKey = {
 
   // Billing
   BILLING_CHECKOUT_CREATED: 'billing.checkout.created',
+  BILLING_PRICE_MISSING: 'billing.price.missing',
+  LOCATIONS_LIMIT_APPLIED: 'billing.locations.limit_applied',
   BILLING_WEBHOOK_RECEIVED: 'billing.webhook.received',
   BILLING_WEBHOOK_ERROR: 'billing.webhook.error',
   BILLING_SUBSCRIPTION_UPDATED: 'billing.subscription.updated',

@@ -104,6 +104,13 @@ export class UpdateCustomerDto {
     message: 'brandColor must be a hex colour, e.g. #2f6df0',
   })
   brandColor?: string;
+
+  @ApiPropertyOptional({
+    description: 'Keep pages live and editable even when the plan does not include them',
+  })
+  @IsOptional()
+  @IsBoolean()
+  pagesOverride?: boolean;
 }
 
 export class AssignSalesRepDto {

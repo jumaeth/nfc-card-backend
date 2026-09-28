@@ -23,7 +23,8 @@ import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import type Stripe from 'stripe';
 import { OrdersService } from './orders.service.js';
-import { StripeService } from './stripe.service.js';
+import { StripeService } from '../billing/stripe.service.js';
+import { BillingService } from '../billing/billing.service.js';
 import {
   CompanyOrderDto,
   GuestOrderDto,
@@ -162,6 +163,7 @@ export class AdminOrdersController {
 export class StripeWebhookController {
   constructor(
     private readonly orders: OrdersService,
+    private readonly billing: BillingService,
     private readonly stripe: StripeService,
   ) {}
 
@@ -189,7 +191,10 @@ export class StripeWebhookController {
       id: event.id,
     });
     // Errors propagate as 5xx so Stripe retries; handlers are idempotent.
+    // Each side ignores events that are not its own (card orders are one-off
+    // payments, plans are subscriptions).
     await this.orders.handleStripeEvent(event);
+    await this.billing.handleStripeEvent(event);
     return { received: true };
   }
 }

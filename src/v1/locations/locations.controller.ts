@@ -1,8 +1,9 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Put, Delete, Param, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { LocationsService } from './locations.service.js';
 import { CreateLocationDto } from './dto/create-location.dto.js';
 import { UpdateLocationDto } from './dto/update-location.dto.js';
+import { SetActiveLocationsDto } from './dto/set-active-locations.dto.js';
 import { BetterAuthGuard } from '../auth/auth.guard.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import type { User } from '../../../generated/prisma/client.js';
@@ -28,6 +29,16 @@ export class LocationsController {
     @Body() dto: CreateLocationDto,
   ) {
     return this.locations.create(companyId, user.id, dto);
+  }
+
+  @ApiOperation({ summary: 'Choose which locations stay editable over the plan limit (ADMIN+)' })
+  @Put('locations/active')
+  setActive(
+    @Param('companyId') companyId: string,
+    @CurrentUser() user: User,
+    @Body() dto: SetActiveLocationsDto,
+  ) {
+    return this.locations.setActive(companyId, user.id, dto.locationIds);
   }
 
   @ApiOperation({ summary: 'Get a single location' })

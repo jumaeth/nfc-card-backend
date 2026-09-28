@@ -223,6 +223,9 @@ model Company {
   billingEmail  String?
   // Default brand colours applied to new pages/cards (Taplino accent by default).
   brandColor    String   @default("#2f6df0")
+  // Staff override: pages stay live and editable even when the plan does not
+  // include them. Without it, pages on such a plan are read-only and offline.
+  pagesOverride Boolean  @default(false)
 
   // The Taplino sales rep who owns this customer. Scopes the admin console for
   // SALES staff; null = unassigned (only SUPPORT/ADMIN see it).
@@ -314,6 +317,11 @@ model Location {
   // Google review integration (used by REVIEW pages by default).
   googlePlaceId   String?
   googleReviewUrl String?
+
+  // Over the plan's location limit (after a downgrade). Kept with its cards and
+  // pages, which stay live, but nothing on it can be changed. The customer
+  // chooses which locations stay editable.
+  readOnly Boolean @default(false)
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   cards   Card[]
@@ -549,17 +557,15 @@ model Invitation {
 
 // Global price catalogue, shared by all tenants (NOT row-level secured).
 model SubscriptionPlan {
-  id            String          @id @default(cuid())
-  tier          PlanTier        @unique
-  name          String
+  id         String          @id @default(cuid())
+  tier       PlanTier        @unique
+  name       String
   // Price in Rappen (CHF cents). 0 for the system/free baseline.
-  priceCents    Int             @default(0)
-  interval      BillingInterval @default(MONTHLY)
-  // Stripe price id for self-serve checkout, if configured.
-  stripePriceId String?
+  priceCents Int             @default(0)
+  interval   BillingInterval @default(MONTHLY)
   // Feature flags/limits resolved by the billing service. e.g.
   // { multiLocation, analytics, unlimitedDestinationChanges, maxLocations }.
-  features      Json            @default("{}")
+  features   Json            @default("{}")
 
   subscriptions Subscription[]
 
@@ -678,7 +684,10 @@ model Subscription {
   currentPeriodStart DateTime @default(now())
   currentPeriodEnd   DateTime
 
-  stripeSubscriptionId String?
+  stripeSubscriptionId String?   @unique
+  // Set when a Stripe subscription is scheduled to end (cancelled in the
+  // billing portal). The plan stays active until then.
+  cancelAt             DateTime?
 
   company Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   plan    SubscriptionPlan @relation(fields: [planId], references: [id])

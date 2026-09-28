@@ -7,7 +7,6 @@ import {
   MaxLength,
   Min,
   MinLength,
-  ValidateIf,
 } from 'class-validator';
 
 export class UpdatePlanDto {
@@ -23,13 +22,6 @@ export class UpdatePlanDto {
   @IsInt()
   @Min(0)
   priceCents?: number;
-
-  @ApiPropertyOptional({ nullable: true })
-  @IsOptional()
-  @ValidateIf((_o, v) => v !== null)
-  @IsString()
-  @MaxLength(255)
-  stripePriceId?: string | null;
 
   @ApiPropertyOptional({
     type: Object,

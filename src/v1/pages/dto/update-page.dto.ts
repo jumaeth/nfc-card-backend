@@ -8,6 +8,7 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
+import { MaxJsonSize, MAX_THEME_BYTES } from '../../../common/max-json-size.js';
 
 export class UpdatePageDto {
   @ApiPropertyOptional({ example: 'Front desk review card', minLength: 1, maxLength: 80 })
@@ -34,6 +35,7 @@ export class UpdatePageDto {
   @ApiPropertyOptional({ description: 'Visual theme.', type: 'object', additionalProperties: true })
   @IsOptional()
   @IsObject()
+  @MaxJsonSize(MAX_THEME_BYTES)
   theme?: Record<string, unknown>;
 
   @ApiPropertyOptional({ description: 'Publish or unpublish the page.' })

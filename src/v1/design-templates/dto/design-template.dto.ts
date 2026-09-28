@@ -6,6 +6,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { MaxJsonSize, MAX_THEME_BYTES } from '../../../common/max-json-size.js';
 
 export class CreateDesignTemplateDto {
   @ApiProperty({ example: 'Trattoria', minLength: 1, maxLength: 60 })
@@ -20,6 +21,7 @@ export class CreateDesignTemplateDto {
     additionalProperties: true,
   })
   @IsObject()
+  @MaxJsonSize(MAX_THEME_BYTES)
   theme!: Record<string, unknown>;
 }
 
@@ -34,5 +36,6 @@ export class UpdateDesignTemplateDto {
   @ApiPropertyOptional({ type: 'object', additionalProperties: true })
   @IsOptional()
   @IsObject()
+  @MaxJsonSize(MAX_THEME_BYTES)
   theme?: Record<string, unknown>;
 }

@@ -13,7 +13,7 @@ import { PrismaService } from '../../prisma/prisma.service.js';
 import { CompanyAccessService } from '../companies/company-access.service.js';
 import { ProductsService } from '../products/products.service.js';
 import { EmailService } from '../../email/email.service.js';
-import { StripeService } from './stripe.service.js';
+import { StripeService } from '../billing/stripe.service.js';
 import {
   CURRENCY,
   priceLine,

@@ -3,8 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 
 /**
- * Thin wrapper around the Stripe SDK. `enabled` is false without
- * STRIPE_SECRET_KEY; OrdersService then simulates payment outside production.
+ * Thin wrapper around the Stripe SDK, shared by card orders and plan
+ * subscriptions. `enabled` is false without STRIPE_SECRET_KEY; OrdersService
+ * then simulates payment outside production.
  */
 @Injectable()
 export class StripeService {
@@ -22,6 +23,12 @@ export class StripeService {
 
   get enabled(): boolean {
     return Boolean(this.stripe);
+  }
+
+  /** The SDK client. Throws when Stripe is not configured. */
+  get client(): Stripe {
+    if (!this.stripe) throw new Error('Stripe is not configured');
+    return this.stripe;
   }
 
   createCheckoutSession(params: Stripe.Checkout.SessionCreateParams) {

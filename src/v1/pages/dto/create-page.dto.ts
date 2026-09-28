@@ -78,6 +78,7 @@ import {
   MinLength,
 } from 'class-validator';
 import type { PageKind } from '../../../../generated/prisma/client.js';
+import { MaxJsonSize, MAX_THEME_BYTES } from '../../../common/max-json-size.js';
 
 // Enum values mirror the Prisma `PageKind`. Declared inline so class-validator
 // has a runtime object to validate against (Prisma types are erased at build).
@@ -118,6 +119,7 @@ export class CreatePageDto {
   @ApiPropertyOptional({ description: 'Visual theme.', type: 'object', additionalProperties: true })
   @IsOptional()
   @IsObject()
+  @MaxJsonSize(MAX_THEME_BYTES)
   theme?: Record<string, unknown>;
 
   @ApiPropertyOptional({ description: 'Whether the page is published. Defaults to false.' })

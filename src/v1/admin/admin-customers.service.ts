@@ -21,6 +21,7 @@ import type {
 } from '../design-templates/dto/design-template.dto.js';
 import type { Request } from 'express';
 import { bootstrapCompany } from '../companies/company-bootstrap.js';
+import { BillingService } from '../billing/billing.service.js';
 import {
   canManageCustomer,
   platformRoleAtLeast,
@@ -95,6 +96,7 @@ export class AdminCustomersService {
     private readonly uploads: UploadsService,
     private readonly designTemplates: DesignTemplatesService,
     private readonly wifiGuests: WifiGuestsService,
+    private readonly billing: BillingService,
   ) {}
 
   // ─── Scope ──────────────────────────────────────────────────────────────────
@@ -304,6 +306,7 @@ export class AdminCustomersService {
           ...renameSlugData(current, dto.slug),
           ...(dto.billingEmail !== undefined && { billingEmail: dto.billingEmail }),
           ...(dto.brandColor !== undefined && { brandColor: dto.brandColor }),
+          ...(dto.pagesOverride !== undefined && { pagesOverride: dto.pagesOverride }),
         },
       });
     });
@@ -364,12 +367,14 @@ export class AdminCustomersService {
         currentPeriodEnd: periodEnd,
         ...(planChanged && { currentPeriodStart: new Date() }),
       };
-      return tx.subscription.upsert({
+      const saved = await tx.subscription.upsert({
         where: { companyId },
         create: { companyId, ...data },
         update: data,
         include: { plan: true },
       });
+      await this.billing.applyCompanyPlan(tx, companyId, plan);
+      return saved;
     });
     this.audit(staff, 'customer.set_subscription', {
       companyId,

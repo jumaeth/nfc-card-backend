@@ -9,6 +9,7 @@ import { Prisma } from '../../../generated/prisma/client.js';
 import type { PageKind } from '../../../generated/prisma/client.js';
 import type { CreatePageDto } from './dto/create-page.dto.js';
 import type { UpdatePageDto } from './dto/update-page.dto.js';
+import { assertLocationWritable } from '../locations/read-only.js';
 
 /** Public slug generator: 8 chars of lowercase alphanumerics. */
 const generateSlug = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 8);
@@ -55,7 +56,7 @@ export class PagesService {
     await this.access.requireManager(userId, companyId);
 
     const features = await this.billing.getCompanyFeatures(companyId);
-    if (!features.createPages) {
+    if (!(await this.billing.pagesActive(companyId, features))) {
       const hint = await this.billing.upgradeHint(
         features,
         (f) => f.createPages,
@@ -65,7 +66,7 @@ export class PagesService {
     }
 
     if (dto.locationId) {
-      await this.requireLocationInCompany(dto.locationId, companyId);
+      assertLocationWritable(await this.requireLocationInCompany(dto.locationId, companyId));
     }
 
     const slug = await this.resolveSlug(dto.slug);
@@ -91,10 +92,10 @@ export class PagesService {
 
   async update(id: string, companyId: string, userId: string, dto: UpdatePageDto) {
     await this.access.requireManager(userId, companyId);
-    const page = await this.requirePage(id, companyId);
+    const page = await this.requireWritablePage(id, companyId);
 
     if (dto.locationId) {
-      await this.requireLocationInCompany(dto.locationId, companyId);
+      assertLocationWritable(await this.requireLocationInCompany(dto.locationId, companyId));
     }
 
     const data: Prisma.PageUpdateInput = {
@@ -127,7 +128,7 @@ export class PagesService {
 
   async remove(id: string, companyId: string, userId: string) {
     await this.access.requireManager(userId, companyId);
-    await this.requirePage(id, companyId);
+    await this.requireWritablePage(id, companyId);
     await this.prisma.$transaction((tx) => softDeletePage(tx, id));
     return { id };
   }
@@ -139,6 +140,19 @@ export class PagesService {
     const page = await this.prisma.page.findUnique({ where: { id } });
     if (!page || page.deletedAt) throw new NotFoundException('Page not found');
     if (page.companyId !== companyId) throw new ForbiddenException();
+    return page;
+  }
+
+  /**
+   * A page that may be changed: the company's pages are active (plan or staff
+   * override) and it is not on a read-only location. Read-only pages are kept.
+   */
+  private async requireWritablePage(id: string, companyId: string) {
+    const page = await this.requirePage(id, companyId);
+    await this.billing.assertPagesActive(companyId);
+    if (page.locationId) {
+      assertLocationWritable(await this.requireLocationInCompany(page.locationId, companyId));
+    }
     return page;
   }
 

@@ -21,6 +21,8 @@
     "db:seed:dev": "tsx prisma/seed-dev.ts",
     "db:seed:demo": "tsx prisma/seed-demo.ts",
     "staff:grant": "tsx prisma/grant-staff.ts",
+    "stripe:plans": "tsx prisma/stripe-plans.ts",
+    "stripe:listen": "stripe listen --forward-to localhost:${PORT:-3311}/api/v1/billing/stripe/webhook --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,checkout.session.expired,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,customer.subscription.paused,customer.subscription.resumed",
     "local:up": "docker compose up -d",
     "local:down": "docker compose down",
     "local:reset": "docker compose down -v && docker compose up -d",

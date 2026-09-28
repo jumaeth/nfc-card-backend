@@ -12,6 +12,7 @@ import { ConfigService } from '@nestjs/config';
 import Anthropic from '@anthropic-ai/sdk';
 import { CompanyAccessService } from '../companies/company-access.service.js';
 import { PrismaService, type TxClient } from '../../prisma/prisma.service.js';
+import { BillingService } from '../billing/billing.service.js';
 import { STAFF_PLATFORM_ROLES } from '../../common/permissions.js';
 import type { User } from '../../../generated/prisma/client.js';
 import { log, warn, error as logError, LogKey } from '../../logger/index.js';
@@ -60,6 +61,7 @@ export class TranslateService {
     config: ConfigService,
     private readonly access: CompanyAccessService,
     private readonly prisma: PrismaService,
+    private readonly billing: BillingService,
   ) {
     const apiKey = config.get<string>('ANTHROPIC_API_KEY');
     if (apiKey) {
@@ -84,6 +86,7 @@ export class TranslateService {
     });
     if (!page || page.deletedAt) throw new NotFoundException('Page not found');
     if (page.companyId !== companyId) throw new ForbiddenException();
+    await this.billing.assertPagesActive(companyId);
 
     const month = currentMonth();
     const isStaff = STAFF_PLATFORM_ROLES.includes(user.platformRole);

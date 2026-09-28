@@ -12,6 +12,7 @@ import {
   timingSafeEqual,
 } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import { BillingService } from '../billing/billing.service.js';
 import { EmailService } from '../../email/email.service.js';
 import { log, warn, LogKey } from '../../logger/index.js';
 import { accessMode } from './wifi-content.js';
@@ -46,6 +47,7 @@ export class WifiAccessService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly email: EmailService,
+    private readonly billing: BillingService,
     config: ConfigService,
   ) {
     this.secret = config.getOrThrow<string>('BETTER_AUTH_SECRET');
@@ -228,7 +230,9 @@ export class WifiAccessService {
       page.deletedAt ||
       !page.published ||
       page.kind !== 'WIFI' ||
-      !wifi?.ssid
+      !wifi?.ssid ||
+      // Offline on a plan without pages.
+      !(await this.billing.pagesActive(page.companyId))
     ) {
       throw new NotFoundException('Page not found');
     }

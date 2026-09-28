@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService, type TxClient } from '../../prisma/prisma.service.js';
 import { CompanyAccessService } from '../companies/company-access.service.js';
+import { BillingService } from '../billing/billing.service.js';
 import { Prisma } from '../../../generated/prisma/client.js';
 import type {
   CreateDesignTemplateDto,
@@ -25,6 +26,7 @@ export class DesignTemplatesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: CompanyAccessService,
+    private readonly billing: BillingService,
   ) {}
 
   async list(companyId: string, userId: string) {
@@ -38,6 +40,7 @@ export class DesignTemplatesService {
     dto: CreateDesignTemplateDto,
   ) {
     await this.access.requireManager(userId, companyId);
+    await this.billing.assertPagesActive(companyId);
     return this.createIn(this.prisma, companyId, dto);
   }
 
@@ -48,11 +51,13 @@ export class DesignTemplatesService {
     dto: UpdateDesignTemplateDto,
   ) {
     await this.access.requireManager(userId, companyId);
+    await this.billing.assertPagesActive(companyId);
     return this.updateIn(this.prisma, companyId, id, dto);
   }
 
   async remove(companyId: string, userId: string, id: string) {
     await this.access.requireManager(userId, companyId);
+    await this.billing.assertPagesActive(companyId);
     await this.removeIn(this.prisma, companyId, id);
   }
 

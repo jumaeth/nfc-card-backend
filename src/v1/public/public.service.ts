@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import { BillingService } from '../billing/billing.service.js';
 import type { Page, PageKind, Prisma } from '../../../generated/prisma/client.js';
 import { log, LogKey } from '../../logger/index.js';
 import { publicWifiContent } from '../wifi/wifi-content.js';
@@ -43,7 +45,16 @@ interface RecordTapArgs {
 
 @Injectable()
 export class PublicService {
-  constructor(private readonly prisma: PrismaService) {}
+  /** Where offline pages send visitors (the marketing site). */
+  private readonly websiteUrl: string;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly billing: BillingService,
+    config: ConfigService,
+  ) {
+    this.websiteUrl = config.get<string>('WEBSITE_URL', 'https://taplino.ch');
+  }
 
   /**
    * Coarse device bucket from the User-Agent. No PII: just ios / android /
@@ -161,6 +172,15 @@ export class PublicService {
 
     const page = card.activePage;
 
+    // Pages are offline on a plan without them: send the visitor to Taplino.
+    if (!(await this.billing.pagesActive(card.companyId))) {
+      return {
+        status: 'redirect' as const,
+        card: { name: card.name, type: card.type },
+        url: this.websiteUrl,
+      };
+    }
+
     await this.recordTap({
       companyId: card.companyId,
       cardId: card.id,
@@ -188,6 +208,9 @@ export class PublicService {
 
     if (!page || page.deletedAt || !page.published) {
       throw new NotFoundException('Page not found');
+    }
+    if (!(await this.billing.pagesActive(page.companyId))) {
+      return { status: 'redirect' as const, url: this.websiteUrl };
     }
 
     await this.recordTap({

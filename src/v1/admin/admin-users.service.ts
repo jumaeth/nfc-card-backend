@@ -1,10 +1,10 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import { BillingService } from '../billing/billing.service.js';
 import {
   canManageCustomer,
   platformRoleAtLeast,
@@ -25,13 +25,21 @@ import type { UpdatePlanDto } from './dto/plans.dto.js';
  */
 @Injectable()
 export class AdminUsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly billing: BillingService,
+  ) {}
 
   /** The signed-in staff member and what the console should offer them. */
   me(staff: Staff & { email: string }) {
     const role = staff.platformRole;
     return {
-      user: { id: staff.id, name: staff.name, email: staff.email, platformRole: role },
+      user: {
+        id: staff.id,
+        name: staff.name,
+        email: staff.email,
+        platformRole: role,
+      },
       capabilities: {
         seesAllCustomers: seesAllCustomers(role),
         createsCustomers: role !== 'SUPPORT',
@@ -40,7 +48,7 @@ export class AdminUsersService {
           { salesRepId: null },
         ),
         viewsUsers: platformRoleAtLeast(role, 'SUPPORT'),
-        managesUsers: platformRoleAtLeast(role, 'ADMIN'),
+        managesUsers: platformRoleAtLeast(role, 'SUPER_ADMIN'),
         managesPlans: platformRoleAtLeast(role, 'SUPER_ADMIN'),
         // Every staff role sees and can claim orders; ADMIN+ can take over.
         managesOrders: platformRoleAtLeast(role, 'SALES'),
@@ -84,7 +92,10 @@ export class AdminUsersService {
             deletedAt: true,
             createdAt: true,
             _count: {
-              select: { companyMembers: { where: { removedAt: null } }, salesCustomers: true },
+              select: {
+                companyMembers: { where: { removedAt: null } },
+                salesCustomers: true,
+              },
             },
           },
         }),
@@ -109,7 +120,11 @@ export class AdminUsersService {
           createdAt: true,
           companyMembers: {
             where: { removedAt: null },
-            include: { company: { select: { id: true, name: true, slug: true, deletedAt: true } } },
+            include: {
+              company: {
+                select: { id: true, name: true, slug: true, deletedAt: true },
+              },
+            },
             orderBy: { createdAt: 'asc' },
           },
           salesCustomers: {
@@ -126,19 +141,14 @@ export class AdminUsersService {
   }
 
   /**
-   * ADMIN+ (enforced on the route). Nobody changes their own role, and only a
-   * SUPER_ADMIN may grant, revoke or edit SUPER_ADMIN.
+   * SUPER_ADMIN only (enforced on the route). Nobody changes their own role.
    */
   async setRole(staff: Staff, userId: string, role: PlatformRole) {
-    if (userId === staff.id) throw new BadRequestException('You cannot change your own role');
+    if (userId === staff.id)
+      throw new BadRequestException('You cannot change your own role');
 
     const target = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!target) throw new NotFoundException('User not found');
-
-    const touchesSuper = role === 'SUPER_ADMIN' || target.platformRole === 'SUPER_ADMIN';
-    if (touchesSuper && staff.platformRole !== 'SUPER_ADMIN') {
-      throw new ForbiddenException('Only a super admin can change super admin access');
-    }
 
     const updated = await this.prisma.user.update({
       where: { id: userId },
@@ -152,7 +162,9 @@ export class AdminUsersService {
       role === 'SALES'
         ? 0
         : await this.prisma.$asAdmin((tx) =>
-            tx.company.count({ where: { salesRepId: userId, deletedAt: null } }),
+            tx.company.count({
+              where: { salesRepId: userId, deletedAt: null },
+            }),
           );
 
     log(LogKey.ADMIN_ACTION, 'Admin: user.set_role', {
@@ -175,7 +187,9 @@ export class AdminUsersService {
           id: true,
           name: true,
           email: true,
-          _count: { select: { salesCustomers: { where: { deletedAt: null } } } },
+          _count: {
+            select: { salesCustomers: { where: { deletedAt: null } } },
+          },
         },
       }),
     );
@@ -194,7 +208,9 @@ export class AdminUsersService {
   }
 
   async updatePlan(staff: Staff, planId: string, dto: UpdatePlanDto) {
-    const plan = await this.prisma.subscriptionPlan.findUnique({ where: { id: planId } });
+    const plan = await this.prisma.subscriptionPlan.findUnique({
+      where: { id: planId },
+    });
     if (!plan) throw new NotFoundException('Plan not found');
 
     const updated = await this.prisma.subscriptionPlan.update({
@@ -202,12 +218,14 @@ export class AdminUsersService {
       data: {
         ...(dto.name !== undefined && { name: dto.name }),
         ...(dto.priceCents !== undefined && { priceCents: dto.priceCents }),
-        ...(dto.stripePriceId !== undefined && { stripePriceId: dto.stripePriceId }),
         ...(dto.features !== undefined && {
           features: dto.features as Prisma.InputJsonValue,
         }),
       },
     });
+    // New location limits apply to every subscriber (extra locations turn
+    // read-only, or editable again when the limit went up).
+    if (dto.features !== undefined) await this.billing.applyPlanLimits(planId);
     log(LogKey.ADMIN_ACTION, 'Admin: plan.update', {
       action: 'plan.update',
       staffId: staff.id,

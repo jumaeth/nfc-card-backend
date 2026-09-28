@@ -10,6 +10,7 @@ import { PrismaService } from '../../prisma/prisma.service.js';
 import { softDeleteCard } from '../../common/soft-delete.js';
 import { CompanyAccessService } from '../companies/company-access.service.js';
 import { log, LogKey } from '../../logger/index.js';
+import { assertLocationWritable } from '../locations/read-only.js';
 import { Prisma } from '../../../generated/prisma/client.js';
 import type { CreateCardDto } from './dto/create-card.dto.js';
 import type { UpdateCardDto } from './dto/update-card.dto.js';
@@ -20,7 +21,9 @@ const ACTIVE_PAGE_SELECT = {
   select: { id: true, name: true, kind: true, slug: true, published: true },
 } as const;
 
-const LOCATION_SELECT = { select: { id: true, name: true } } as const;
+const LOCATION_SELECT = {
+  select: { id: true, name: true, readOnly: true },
+} as const;
 
 @Injectable()
 export class CardsService {
@@ -97,7 +100,7 @@ export class CardsService {
     dto: UpdateCardDto,
   ) {
     await this.access.requireManager(userId, companyId);
-    await this.requireCard(id, companyId);
+    await this.requireWritableCard(id, companyId);
 
     if (dto.locationId) {
       await this.assertLocationInCompany(dto.locationId, companyId);
@@ -131,7 +134,7 @@ export class CardsService {
     target: { pageId?: string | null; url?: string | null },
   ) {
     await this.access.requireManager(userId, companyId);
-    await this.requireCard(id, companyId);
+    await this.requireWritableCard(id, companyId);
 
     const data = await destinationData(this.prisma, companyId, target);
     const card = await this.prisma.card.update({
@@ -159,7 +162,7 @@ export class CardsService {
   /** Delete a card. */
   async remove(id: string, companyId: string, userId: string) {
     await this.access.requireManager(userId, companyId);
-    await this.requireCard(id, companyId);
+    await this.requireWritableCard(id, companyId);
     await this.prisma.$transaction((tx) => softDeleteCard(tx, id));
     return { id, deleted: true };
   }
@@ -183,14 +186,29 @@ export class CardsService {
     return card;
   }
 
-  /** Verify a location exists within the company. */
+  /** A card that may be changed: not on a read-only location. */
+  private async requireWritableCard(id: string, companyId: string) {
+    const card = await this.requireCard(id, companyId);
+    if (card.locationId) {
+      assertLocationWritable(
+        await this.prisma.location.findUnique({
+          where: { id: card.locationId },
+          select: { readOnly: true },
+        }),
+      );
+    }
+    return card;
+  }
+
+  /** Verify a location exists within the company and can take cards. */
   private async assertLocationInCompany(locationId: string, companyId: string) {
     const location = await this.prisma.location.findUnique({
       where: { id: locationId },
-      select: { id: true, companyId: true, deletedAt: true },
+      select: { id: true, companyId: true, deletedAt: true, readOnly: true },
     });
     if (!location || location.deletedAt || location.companyId !== companyId) {
       throw new BadRequestException('Location does not belong to this company');
     }
+    assertLocationWritable(location);
   }
 }
