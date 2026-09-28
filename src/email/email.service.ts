@@ -168,6 +168,8 @@ export class EmailService {
 const ACCENT = '#2f6df0';
 const INK = '#14120f';
 const MUTED = '#6c665b';
+// Same title stack as the marketing site. Single quotes only: it sits inside style="".
+const SERIF = "'Iowan Old Style','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif";
 
 function shell(inner: string): string {
   return `<!DOCTYPE html>
@@ -187,7 +189,7 @@ function button(href: string, label: string): string {
 
 function verificationTemplate(url: string): string {
   return shell(`
-    <p style="margin:0 0 8px;font-size:22px;font-weight:700;color:${INK}">Verify your email address</p>
+    <p style="margin:0 0 8px;font-family:${SERIF};font-size:24px;font-weight:600;color:${INK}">Verify your email address</p>
     <p style="margin:0 0 28px;font-size:15px;color:${MUTED};line-height:1.5">Thanks for signing up for Taplino. Click below to verify your email and activate your account.</p>
     ${button(url, 'Verify email')}
     <p style="margin:28px 0 0;font-size:13px;color:#a1a1aa">This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.</p>`);
@@ -195,7 +197,7 @@ function verificationTemplate(url: string): string {
 
 function otpTemplate(code: string): string {
   return shell(`
-    <p style="margin:0 0 8px;font-size:22px;font-weight:700;color:${INK}">Your verification code</p>
+    <p style="margin:0 0 8px;font-family:${SERIF};font-size:24px;font-weight:600;color:${INK}">Your verification code</p>
     <p style="margin:0 0 24px;font-size:15px;color:${MUTED};line-height:1.5">Enter this code to continue. It confirms it's really you.</p>
     <p style="margin:0 0 24px;font-size:34px;font-weight:700;letter-spacing:8px;color:${INK}">${code}</p>
     <p style="margin:0;font-size:13px;color:#a1a1aa">This code expires shortly. If you didn't request it, you can safely ignore this email.</p>`);
@@ -203,7 +205,7 @@ function otpTemplate(code: string): string {
 
 function passwordResetOtpTemplate(code: string): string {
   return shell(`
-    <p style="margin:0 0 8px;font-size:22px;font-weight:700;color:${INK}">Reset your password</p>
+    <p style="margin:0 0 8px;font-family:${SERIF};font-size:24px;font-weight:600;color:${INK}">Reset your password</p>
     <p style="margin:0 0 24px;font-size:15px;color:${MUTED};line-height:1.5">Enter this code in the app to choose a new password.</p>
     <p style="margin:0 0 24px;font-size:34px;font-weight:700;letter-spacing:8px;color:${INK}">${code}</p>
     <p style="margin:0;font-size:13px;color:#a1a1aa">This code expires shortly. If you didn't request a password reset, you can safely ignore this email.</p>`);
@@ -212,7 +214,7 @@ function passwordResetOtpTemplate(code: string): string {
 function invitationTemplate(data: InvitationEmailData): string {
   const roleLabel = data.role.charAt(0) + data.role.slice(1).toLowerCase();
   return shell(`
-    <p style="margin:0 0 8px;font-size:22px;font-weight:700;color:${INK}">You've been invited</p>
+    <p style="margin:0 0 8px;font-family:${SERIF};font-size:24px;font-weight:600;color:${INK}">You've been invited</p>
     <p style="margin:0 0 28px;font-size:15px;color:${MUTED};line-height:1.5"><strong>${data.inviterName}</strong> invited you to join <strong>${data.companyName}</strong> on Taplino as <strong>${roleLabel}</strong>.</p>
     ${button(data.acceptUrl, 'Accept invitation')}
     <p style="margin:28px 0 0;font-size:13px;color:#a1a1aa">This invitation expires in 7 days. If you don't have a Taplino account yet, you'll be asked to create one after clicking the link.</p>`);
@@ -264,7 +266,7 @@ function wifiCodeTemplate(
   copy: (typeof WIFI_CODE_COPY)['de'],
 ): string {
   return shell(`
-    <p style="margin:0 0 8px;font-size:22px;font-weight:700;color:${INK}">${copy.title}</p>
+    <p style="margin:0 0 8px;font-family:${SERIF};font-size:24px;font-weight:600;color:${INK}">${copy.title}</p>
     <p style="margin:0 0 24px;font-size:15px;color:${MUTED};line-height:1.5">${copy.body(escapeHtml(data.businessName), escapeHtml(data.ssid))}</p>
     <p style="margin:0 0 24px;font-size:34px;font-weight:700;letter-spacing:8px;color:${INK}">${data.code}</p>
     <p style="margin:0;font-size:13px;color:#a1a1aa">${copy.footer}</p>`);
@@ -310,7 +312,7 @@ function orderConfirmationTemplate(data: OrderEmailData): string {
     : `<p style="margin:0 0 24px;font-size:15px;color:${MUTED};line-height:1.5">Create your free Taplino account with this email address to choose what your cards open, update it anytime and see tap statistics. Your order is linked automatically.</p>
     ${button(data.appUrl, 'Create your account')}`;
   return shell(`
-    <p style="margin:0 0 8px;font-size:22px;font-weight:700;color:${INK}">Thanks for your order, ${escapeHtml(data.customerName)}</p>
+    <p style="margin:0 0 8px;font-family:${SERIF};font-size:24px;font-weight:600;color:${INK}">Thanks for your order, ${escapeHtml(data.customerName)}</p>
     <p style="margin:0 0 24px;font-size:15px;color:${MUTED};line-height:1.5">We received your payment for order <strong>${escapeHtml(data.number)}</strong>. We will produce your cards and let you know when they ship.</p>
     ${orderItemsTable(data)}
     ${next}
@@ -319,7 +321,7 @@ function orderConfirmationTemplate(data: OrderEmailData): string {
 
 function orderNotificationTemplate(data: OrderNotificationData): string {
   return shell(`
-    <p style="margin:0 0 8px;font-size:22px;font-weight:700;color:${INK}">New paid order ${escapeHtml(data.number)}</p>
+    <p style="margin:0 0 8px;font-family:${SERIF};font-size:24px;font-weight:600;color:${INK}">New paid order ${escapeHtml(data.number)}</p>
     <p style="margin:0 0 24px;font-size:15px;color:${MUTED};line-height:1.5">${escapeHtml(data.customerName)} (${escapeHtml(data.email)})${
       data.linkedCompanyName
         ? `, linked to ${escapeHtml(data.linkedCompanyName)}`
